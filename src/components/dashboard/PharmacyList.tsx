@@ -1,71 +1,54 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { Calendar, Clock, MapPin, MoreVertical } from 'lucide-react';
+import { Package, Clock, DollarSign, MoreVertical } from 'lucide-react';
 import axios from 'axios';
 import Button from '../shared/Button';
 import { format } from 'date-fns';
 import { toast } from 'react-toastify';
 
-interface Appointment {
+interface PharmacyOrder {
   _id: string;
-  doctor: {
+  items: {
     name: string;
-    specialty: string;
-  };
-  appointmentDate: string;
-  appointmentTime: string;
+    brand: string;
+    quantity: number;
+    price: number;
+  }[];
+  totalAmount: number;
   status: string;
+  createdAt: string;
 }
 
-const AppointmentsList = () => {
-  const [appointments, setAppointments] = useState<Appointment[]>([]);
+const PharmacyList = () => {
+  const [pharmacyOrders, setPharmacyOrders] = useState<PharmacyOrder[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    const fetchAppointments = async () => {
+    const fetchPharmacyOrders = async () => {
       try {
         // Get userId from local storage
         const userId = localStorage.getItem('userId');
         
         if (!userId) {
-          toast.error('Please log in to view appointments');
+          toast.error('Please log in to view pharmacy orders');
           setIsLoading(false);
           return;
         }
 
-        // Fetch appointments
-        const response = await axios.get(`/appointments/${userId}`);
+        // Fetch pharmacy orders
+        const response = await axios.get(`/pharmacy/orders/${userId}`);
         
-        setAppointments(response.data.appointments);
+        setPharmacyOrders(response.data.pharmacyOrders);
         setIsLoading(false);
       } catch (error) {
-        console.error('Error fetching appointments', error);
-        toast.error('Failed to load appointments');
+        console.error('Error fetching pharmacy orders', error);
+        toast.error('Failed to load pharmacy orders');
         setIsLoading(false);
       }
     };
 
-    fetchAppointments();
+    fetchPharmacyOrders();
   }, []);
-
-  // Cancel Appointment Handler
-  const handleCancelAppointment = async (appointmentId: string) => {
-    try {
-      // Implement cancel appointment logic
-      // You might want to add a backend route to handle cancellation
-      await axios.patch(`/appointments/${appointmentId}/cancel`);
-      
-      // Remove the cancelled appointment from the list
-      setAppointments(prev => 
-        prev.filter(appointment => appointment._id !== appointmentId)
-      );
-      
-      toast.success('Appointment cancelled successfully');
-    } catch (error) {
-      console.error('Error cancelling appointment', error);
-      toast.error('Failed to cancel appointment');
-    }
-  };
 
   if (isLoading) {
     return (
@@ -74,7 +57,7 @@ const AppointmentsList = () => {
         animate={{ opacity: 1, y: 0 }}
         className="bg-white rounded-2xl p-6 shadow-lg"
       >
-        <div className="text-center text-gray-500">Loading appointments...</div>
+        <div className="text-center text-gray-500">Loading pharmacy orders...</div>
       </motion.div>
     );
   }
@@ -87,28 +70,28 @@ const AppointmentsList = () => {
     >
       <div className="flex items-center justify-between mb-6">
         <h2 className="text-xl font-semibold text-gray-900">
-          {appointments.length > 0 ? 'Upcoming Appointments' : 'No Upcoming Appointments'}
+          {pharmacyOrders.length > 0 ? 'Pharmacy Orders' : 'No Pharmacy Orders'}
         </h2>
-        {appointments.length > 0 && (
+        {pharmacyOrders.length > 0 && (
           <Button variant="outline" size="sm">View All</Button>
         )}
       </div>
 
       <div className="space-y-4">
-        {appointments.map((appointment) => (
+        {pharmacyOrders.map((order) => (
           <motion.div
-            key={appointment._id}
+            key={order._id}
             whileHover={{ scale: 1.02 }}
-            className="p-4 rounded-xl border border-gray-200 hover:border-blue-200 
+            className="p-4 rounded-xl border border-gray-200 hover:border-violet-200 
               hover:shadow-md transition-all duration-300"
           >
             <div className="flex items-start justify-between">
               <div>
                 <h3 className="font-semibold text-gray-900">
-                  {appointment.doctor.name}
+                  Pharmacy Order
                 </h3>
-                <p className="text-blue-600 text-sm">
-                  {appointment.doctor.specialty}
+                <p className="text-violet-600 text-sm">
+                  {order.items.length} Item(s)
                 </p>
               </div>
               <div className="relative">
@@ -120,41 +103,50 @@ const AppointmentsList = () => {
 
             <div className="mt-4 grid grid-cols-3 gap-4">
               <div className="flex items-center gap-2 text-gray-600">
-                <Calendar className="w-4 h-4" />
+                <Package className="w-4 h-4" />
                 <span className="text-sm">
-                  {format(new Date(appointment.appointmentDate), 'PPP')}
+                  {format(new Date(order.createdAt), 'PPP')}
                 </span>
               </div>
               <div className="flex items-center gap-2 text-gray-600">
                 <Clock className="w-4 h-4" />
-                <span className="text-sm">{appointment.appointmentTime}</span>
+                <span className="text-sm">
+                  {format(new Date(order.createdAt), 'p')}
+                </span>
               </div>
-              {/* Optional: Add location if available in the schema */}
               <div className="flex items-center gap-2 text-gray-600">
-                <MapPin className="w-4 h-4" />
-                <span className="text-sm">TBD</span>
+                <DollarSign className="w-4 h-4" />
+                <span className="text-sm">₹{order.totalAmount.toFixed(2)}</span>
               </div>
             </div>
 
             <div className="mt-4 flex items-center justify-between">
               <span className={`px-3 py-1 rounded-full text-sm
-                ${appointment.status === 'Confirmed'
+                ${order.status === 'Delivered'
                   ? 'bg-green-100 text-green-600'
-                  : appointment.status === 'Cancelled'
+                  : order.status === 'Cancelled'
                   ? 'bg-red-100 text-red-600'
                   : 'bg-amber-100 text-amber-600'
                 }`}>
-                {appointment.status}
+                {order.status}
               </span>
               <div className="flex gap-2">
-                <Button 
-                  size="sm" 
-                  variant="outline"
-                  onClick={() => handleCancelAppointment(appointment._id)}
-                >
-                  Cancel
+                <Button size="sm" variant="outline">
+                  View Details
                 </Button>
-                <Button size="sm">View Details</Button>
+                <Button size="sm">Reorder</Button>
+              </div>
+            </div>
+
+            {/* Order Items */}
+            <div className="mt-4 border-t pt-3">
+              <div className="space-y-2">
+                {order.items.map((item, index) => (
+                  <div key={index} className="flex justify-between text-sm text-gray-600">
+                    <span>{item.name} ({item.brand})</span>
+                    <span>x{item.quantity} - ₹{(item.price * item.quantity).toFixed(2)}</span>
+                  </div>
+                ))}
               </div>
             </div>
           </motion.div>
@@ -164,4 +156,4 @@ const AppointmentsList = () => {
   );
 };
 
-export default AppointmentsList;
+export default PharmacyList;

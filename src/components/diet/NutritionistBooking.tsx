@@ -1,10 +1,22 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { motion } from 'framer-motion';
+import axios from 'axios';
+import { useNavigate } from 'react-router-dom';
 import { Calendar, Clock, CreditCard, User } from 'lucide-react';
 import Button from '../shared/Button';
 import DatePicker from '../shared/DatePicker';
 
-const nutritionists = [
+// Nutritionist data type
+interface Nutritionist {
+  id: number;
+  name: string;
+  specialization: string;
+  experience: string;
+  price: number;
+  image: string;
+}
+
+const nutritionists: Nutritionist[] = [
   {
     id: 1,
     name: "Dr. Priya Sharma",
@@ -31,24 +43,73 @@ const nutritionists = [
   }
 ];
 
-const NutritionistBooking = () => {
-  const [selectedNutritionist, setSelectedNutritionist] = React.useState<number | null>(null);
-  const [selectedDate, setSelectedDate] = React.useState<Date>();
-  const [selectedTime, setSelectedTime] = React.useState<string>();
-  const [showPayment, setShowPayment] = React.useState(false);
-  const [isLoading, setIsLoading] = React.useState(false);
+const NutritionistBooking: React.FC = () => {
+  const [selectedNutritionist, setSelectedNutritionist] = useState<number | null>(null);
+  const [selectedDate, setSelectedDate] = useState<Date | undefined>();
+  const [selectedTime, setSelectedTime] = useState<string | undefined>();
+  const [showPayment, setShowPayment] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [paymentDetails, setPaymentDetails] = useState({
+    cardNumber: '',
+    expiryDate: '',
+    cvv: ''
+  });
+
+  const navigate = useNavigate();
 
   const availableTimes = [
     "09:00", "10:00", "11:00", "14:00", "15:00", "16:00"
   ];
 
+  const handlePaymentInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const { name, value } = e.target;
+    setPaymentDetails(prev => ({
+      ...prev,
+      [name]: value
+    }));
+  };
+
   const handleBooking = async () => {
     setIsLoading(true);
-    // Simulate payment processing
-    await new Promise(resolve => setTimeout(resolve, 1500));
-    setIsLoading(false);
-    setShowPayment(false);
-    alert("Booking confirmed! You will receive a confirmation email shortly.");
+    try {
+      // Get user ID from localStorage or authentication context
+      const userId = localStorage.getItem('userId');
+      
+      if (!userId) {
+        throw new Error('User not authenticated');
+      }
+
+      const selectedNutritionistDetails = nutritionists.find(n => n.id === selectedNutritionist);
+
+      if (!selectedNutritionistDetails || !selectedDate || !selectedTime) {
+        throw new Error('Incomplete booking details');
+      }
+
+      const response = await axios.post('/nutritionist/book', {
+        userId,
+        nutritionistId: selectedNutritionist,
+        nutritionistName: selectedNutritionistDetails.name,
+        nutritionistSpecialty: selectedNutritionistDetails.specialization,
+        bookingDate: selectedDate,
+        bookingTime: selectedTime,
+        totalPrice: selectedNutritionistDetails.price
+      });
+
+      // Reset states
+      setIsLoading(false);
+      setShowPayment(false);
+      
+      // Show success message
+      alert(response.data.message);
+      
+      // Navigate to bookings or dashboard
+      navigate('/bookings');
+
+    } catch (error) {
+      console.error('Booking Error:', error);
+      alert('Failed to book appointment. Please try again.');
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -73,6 +134,7 @@ const NutritionistBooking = () => {
                 }`}
               onClick={() => setSelectedNutritionist(nutritionist.id)}
             >
+              {/* Nutritionist card details remain the same */}
               <div className="flex items-center gap-4">
                 <img
                   src={nutritionist.image}
@@ -159,7 +221,10 @@ const NutritionistBooking = () => {
               </label>
               <input
                 type="text"
+                name="cardNumber"
                 placeholder="1234 5678 9012 3456"
+                value={paymentDetails.cardNumber}
+                onChange={handlePaymentInputChange}
                 className="w-full px-4 py-3 rounded-xl border border-gray-300"
                 required
               />
@@ -172,7 +237,10 @@ const NutritionistBooking = () => {
                 </label>
                 <input
                   type="text"
+                  name="expiryDate"
                   placeholder="MM/YY"
+                  value={paymentDetails.expiryDate}
+                  onChange={handlePaymentInputChange}
                   className="w-full px-4 py-3 rounded-xl border border-gray-300"
                   required
                 />
@@ -183,7 +251,10 @@ const NutritionistBooking = () => {
                 </label>
                 <input
                   type="text"
+                  name="cvv"
                   placeholder="123"
+                  value={paymentDetails.cvv}
+                  onChange={handlePaymentInputChange}
                   className="w-full px-4 py-3 rounded-xl border border-gray-300"
                   required
                 />

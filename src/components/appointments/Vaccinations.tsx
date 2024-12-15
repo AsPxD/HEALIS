@@ -3,6 +3,10 @@ import { motion } from 'framer-motion';
 import { Search, Calendar, MapPin, Shield, Clock } from 'lucide-react';
 import Input from '../shared/Input';
 import Button from '../shared/Button';
+import DatePicker from '../shared/DatePicker';
+import { format } from 'date-fns';
+import { toast } from 'react-toastify';
+import axios from 'axios';
 
 const vaccines = [
   {
@@ -13,7 +17,12 @@ const vaccines = [
     duration: "15-20 minutes",
     nextDose: "After 84 days",
     locations: ["Andheri", "Bandra", "Colaba"],
-    manufacturer: "Serum Institute"
+    manufacturer: "Serum Institute",
+    availability: {
+      "Andheri": ["09:00", "11:00", "14:00", "16:00"],
+      "Bandra": ["10:00", "12:00", "15:00", "17:00"],
+      "Colaba": ["09:30", "11:30", "14:30", "16:30"]
+    }
   },
   {
     id: 2,
@@ -23,7 +32,12 @@ const vaccines = [
     duration: "10-15 minutes",
     nextDose: "Yearly",
     locations: ["Powai", "Worli", "Juhu"],
-    manufacturer: "GSK"
+    manufacturer: "GSK",
+    availability: {
+      "Powai": ["10:00", "12:00", "14:00", "16:00"],
+      "Worli": ["09:30", "11:30", "15:00", "17:00"],
+      "Juhu": ["10:30", "12:30", "15:30", "16:30"]
+    }
   },
   {
     id: 3,
@@ -33,7 +47,12 @@ const vaccines = [
     duration: "15 minutes",
     nextDose: "After 30 days",
     locations: ["Dadar", "Kurla", "Thane"],
-    manufacturer: "Bharat Biotech"
+    manufacturer: "Bharat Biotech",
+    availability: {
+      "Dadar": ["09:00", "11:00", "14:00", "16:00"],
+      "Kurla": ["10:00", "12:00", "15:00", "17:00"],
+      "Thane": ["09:30", "11:30", "14:30", "16:30"]
+    }
   }
 ];
 
@@ -41,6 +60,61 @@ const Vaccinations = () => {
   const [searchTerm, setSearchTerm] = React.useState("");
   const [selectedVaccine, setSelectedVaccine] = React.useState<number | null>(null);
   const [selectedLocation, setSelectedLocation] = React.useState("");
+  const [selectedDate, setSelectedDate] = React.useState<Date>();
+  const [selectedTime, setSelectedTime] = React.useState<string>();
+  const [isBooking, setIsBooking] = React.useState(false);
+
+  const handleBookVaccination = async () => {
+    // Validation checks
+    if (!selectedDate || !selectedVaccine || !selectedLocation || !selectedTime) {
+      toast.error('Please complete all vaccination details');
+      return;
+    }
+
+    // Get user ID from local storage
+    const userId = localStorage.getItem('userId');
+    if (!userId) {
+      toast.error('Please log in to book a vaccination');
+      return;
+    }
+
+    // Find selected vaccine details
+    const vaccine = vaccines.find(v => v.id === selectedVaccine);
+    if (!vaccine) {
+      toast.error('Invalid vaccine selection');
+      return;
+    }
+
+    setIsBooking(true);
+
+    try {
+      const response = await axios.post('/vaccinations/book', {
+        userId,
+        vaccineId: vaccine.id,
+        vaccineName: vaccine.name,
+        manufacturer: vaccine.manufacturer,
+        location: selectedLocation,
+        appointmentDate: selectedDate.toISOString(),
+        appointmentTime: selectedTime,
+        price: vaccine.price
+      });
+
+      toast.success('Vaccination booked successfully!');
+
+      // Reset form
+      setSelectedDate(undefined);
+      setSelectedVaccine(null);
+      setSelectedLocation("");
+      setSelectedTime(undefined);
+
+    } catch (error) {
+      console.error('Booking error', error);
+      toast.error('Failed to book vaccination. Please try again.');
+    } finally {
+      setIsBooking(false);
+    }
+  };
+
 
   return (
     <div className="grid lg:grid-cols-3 gap-8">
@@ -114,6 +188,31 @@ const Vaccinations = () => {
                             </button>
                           ))}
                         </div>
+
+                        {selectedLocation && (
+                          <motion.div
+                            initial={{ opacity: 0, height: 0 }}
+                            animate={{ opacity: 1, height: 'auto' }}
+                            className="mt-4 pt-4 border-t border-gray-200"
+                          >
+                            <p className="font-medium text-gray-900 mb-2">Available Slots</p>
+                            <div className="flex flex-wrap gap-2">
+                              {vaccine.availability[selectedLocation].map((time) => (
+                                <button
+                                  key={time}
+                                  onClick={() => setSelectedTime(time)}
+                                  className={`px-4 py-2 rounded-lg transition-all duration-300
+                                    ${selectedTime === time
+                                      ? 'bg-violet-500 text-white'
+                                      : 'bg-violet-50 text-violet-700 hover:bg-violet-100'
+                                    }`}
+                                >
+                                  {time}
+                                </button>
+                              ))}
+                            </div>
+                          </motion.div>
+                        )}
                       </motion.div>
                     )}
                   </div>
@@ -128,32 +227,50 @@ const Vaccinations = () => {
       </div>
 
       {selectedVaccine && selectedLocation && (
-        <motion.div
-          initial={{ opacity: 0, x: 20 }}
-          animate={{ opacity: 1, x: 0 }}
-          className="space-y-6"
-        >
+        <div className="space-y-6">
           <div className="bg-white/80 backdrop-blur-sm rounded-2xl p-6 border border-gray-200">
-            <h3 className="text-xl font-semibold text-gray-900 mb-4">Vaccination Details</h3>
-            <div className="space-y-3 text-gray-600">
-              <div className="flex items-center gap-2">
-                <Shield className="w-5 h-5" />
-                <span>{vaccines.find(v => v.id === selectedVaccine)?.name}</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <MapPin className="w-5 h-5" />
-                <span>{selectedLocation}</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <Clock className="w-5 h-5" />
-                <span>{vaccines.find(v => v.id === selectedVaccine)?.duration}</span>
-              </div>
-            </div>
-            <Button className="w-full mt-6">
-              Schedule Vaccination
-            </Button>
+            <DatePicker
+              selected={selectedDate}
+              onSelect={setSelectedDate}
+              className="mx-auto"
+            />
           </div>
-        </motion.div>
+
+          {selectedVaccine && selectedLocation && selectedDate && selectedTime && (
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="bg-white/80 backdrop-blur-sm rounded-2xl p-6 border border-gray-200"
+            >
+              <h3 className="text-xl font-semibold text-gray-900 mb-4">Vaccination Details</h3>
+              <div className="space-y-3 text-gray-600">
+                <div className="flex items-center gap-2">
+                  <Shield className="w-5 h-5" />
+                  <span>{vaccines.find(v => v.id === selectedVaccine)?.name}</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <MapPin className="w-5 h-5" />
+                  <span>{selectedLocation}</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Calendar className="w-5 h-5" />
+                  <span>{format(selectedDate, 'PPP')}</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Clock className="w-5 h-5" />
+                  <span>{selectedTime}</span>
+                </div>
+              </div>
+              <Button
+                className="w-full mt-6"
+                onClick={handleBookVaccination}
+                isLoading={isBooking}
+              >
+                Confirm Vaccination
+              </Button>
+            </motion.div>
+          )}
+        </div>
       )}
     </div>
   );

@@ -3,7 +3,8 @@ import { motion } from 'framer-motion';
 import { Search, Clock, Calendar as CalendarIcon, MapPin, Activity } from 'lucide-react';
 import Input from '../shared/Input';
 import Button from '../shared/Button';
-
+import axios from 'axios';
+import { toast } from 'react-toastify';
 const packages = [
   {
     id: 1,
@@ -54,6 +55,56 @@ const HealthCheckup = () => {
   const [searchTerm, setSearchTerm] = React.useState("");
   const [selectedPackage, setSelectedPackage] = React.useState<number | null>(null);
   const [selectedLocation, setSelectedLocation] = React.useState("");
+  const [isBooking, setIsBooking] = React.useState(false);
+
+  const handleBookHealthCheckup = async () => {
+    // Validation checks
+    if (!selectedPackage || !selectedLocation) {
+      toast.error('Please select a package and location');
+      return;
+    }
+
+    // Get user ID from local storage
+    const userId = localStorage.getItem('userId');
+    if (!userId) {
+      toast.error('Please log in to book a health checkup');
+      return;
+    }
+
+    // Find selected package details
+    const pkg = packages.find(p => p.id === selectedPackage);
+    if (!pkg) {
+      toast.error('Invalid package selection');
+      return;
+    }
+
+    setIsBooking(true);
+
+    try {
+      const response = await axios.post('/health-checkup/book', {
+        userId,
+        packageId: pkg.id,
+        packageName: pkg.name,
+        packageDescription: pkg.description,
+        location: selectedLocation,
+        tests: pkg.tests,
+        bookingDate: new Date().toISOString(),
+        totalPrice: pkg.price
+      });
+
+      toast.success('Health Checkup booked successfully!');
+
+      // Reset form
+      setSelectedPackage(null);
+      setSelectedLocation("");
+
+    } catch (error) {
+      console.error('Booking error', error);
+      toast.error('Failed to book health checkup. Please try again.');
+    } finally {
+      setIsBooking(false);
+    }
+  };
 
   return (
     <div className="grid lg:grid-cols-3 gap-8">
@@ -89,7 +140,7 @@ const HealthCheckup = () => {
                   <div className="flex-1">
                     <h3 className="text-xl font-semibold text-gray-900 mb-2">{pkg.name}</h3>
                     <p className="text-gray-600 mb-4">{pkg.description}</p>
-                    
+
                     <div className="grid grid-cols-2 gap-4 text-gray-600 mb-4">
                       <div className="flex items-center gap-2">
                         <Clock className="w-4 h-4" />
@@ -140,7 +191,7 @@ const HealthCheckup = () => {
                       </motion.div>
                     )}
                   </div>
-                  
+
                   <div className="text-right">
                     <p className="text-2xl font-bold text-violet-600">₹{pkg.price}</p>
                   </div>
@@ -169,7 +220,7 @@ const HealthCheckup = () => {
               </div>
               <div className="flex items-center gap-2">
                 <Clock className="w-5 h-5" />
-                <span>{packages.find(p => p.id === selectedPackage)?. duration}</span>
+                <span>{packages.find(p => p.id === selectedPackage)?.duration}</span>
               </div>
               <div className="pt-3 border-t border-gray-200">
                 <div className="flex justify-between items-center font-bold">
@@ -180,7 +231,11 @@ const HealthCheckup = () => {
                 </div>
               </div>
             </div>
-            <Button className="w-full mt-6">
+            <Button
+              className="w-full mt-6"
+              onClick={handleBookHealthCheckup}
+              isLoading={isBooking}
+            >
               Book Health Checkup
             </Button>
           </div>

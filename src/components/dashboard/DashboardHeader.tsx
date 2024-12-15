@@ -1,22 +1,39 @@
-import React from 'react';
+import React,{useEffect,useState} from 'react';
 import { motion } from 'framer-motion';
 import { Bell, Settings, Search } from 'lucide-react';
 import Input from '../shared/Input';
-
+import axios from 'axios';
+axios.defaults.baseURL = 'http://localhost:3000';
 const DashboardHeader = () => {
   const notifications = [
     { id: 1, text: "Upcoming appointment with Dr. Sharma", time: "2 hours ago" },
     { id: 2, text: "Medicine reminder: Vitamin D", time: "1 hour ago" },
     { id: 3, text: "New health report available", time: "30 minutes ago" }
   ];
-
+  const [fullName, setFullName] = useState('User');
   const [showNotifications, setShowNotifications] = React.useState(false);
+  useEffect(() => {
+    const fetchUserProfile = async () => {
+      try {
+        // Retrieve userId from localStorage after successful login
+        const userId = localStorage.getItem('userId');
+        
+        if (userId) {
+          const response = await axios.get(`/auth/${userId}`);
+          setFullName(response.data.fullName);
+        }
+      } catch (error) {
+        console.error('Error fetching user profile:', error);
+      }
+    };
 
+    fetchUserProfile();
+  }, []);
   return (
     <div className="bg-white rounded-2xl p-6 shadow-lg">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Welcome back, User!</h1>
+          <h1 className="text-2xl font-bold text-gray-900">Welcome back, {fullName}</h1>
           <p className="text-gray-600">Here's your health overview</p>
         </div>
         

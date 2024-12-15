@@ -6,9 +6,9 @@ import Button from '../shared/Button';
 import { format } from 'date-fns';
 import { toast } from 'react-toastify';
 
-interface Appointment {
+interface MentalHealthAppointment {
   _id: string;
-  doctor: {
+  therapist: {
     name: string;
     specialty: string;
   };
@@ -17,52 +17,51 @@ interface Appointment {
   status: string;
 }
 
-const AppointmentsList = () => {
-  const [appointments, setAppointments] = useState<Appointment[]>([]);
+const MentalHealthList = () => {
+  const [appointments, setAppointments] = useState<MentalHealthAppointment[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    const fetchAppointments = async () => {
+    const fetchMentalHealthAppointments = async () => {
       try {
         // Get userId from local storage
         const userId = localStorage.getItem('userId');
         
         if (!userId) {
-          toast.error('Please log in to view appointments');
+          toast.error('Please log in to view mental health appointments');
           setIsLoading(false);
           return;
         }
 
-        // Fetch appointments
-        const response = await axios.get(`/appointments/${userId}`);
+        // Fetch mental health appointments
+        const response = await axios.get(`/mental-health/appointments/${userId}`);
         
-        setAppointments(response.data.appointments);
+        setAppointments(response.data.mentalHealthAppointments);
         setIsLoading(false);
       } catch (error) {
-        console.error('Error fetching appointments', error);
-        toast.error('Failed to load appointments');
+        console.error('Error fetching mental health appointments', error);
+        toast.error('Failed to load mental health appointments');
         setIsLoading(false);
       }
     };
 
-    fetchAppointments();
+    fetchMentalHealthAppointments();
   }, []);
 
   // Cancel Appointment Handler
   const handleCancelAppointment = async (appointmentId: string) => {
     try {
-      // Implement cancel appointment logic
-      // You might want to add a backend route to handle cancellation
-      await axios.patch(`/appointments/${appointmentId}/cancel`);
+      // Cancel mental health appointment
+      await axios.patch(`/mental-health/appointments/${appointmentId}/cancel`);
       
       // Remove the cancelled appointment from the list
       setAppointments(prev => 
         prev.filter(appointment => appointment._id !== appointmentId)
       );
       
-      toast.success('Appointment cancelled successfully');
+      toast.success('Mental Health Appointment cancelled successfully');
     } catch (error) {
-      console.error('Error cancelling appointment', error);
+      console.error('Error cancelling mental health appointment', error);
       toast.error('Failed to cancel appointment');
     }
   };
@@ -74,7 +73,7 @@ const AppointmentsList = () => {
         animate={{ opacity: 1, y: 0 }}
         className="bg-white rounded-2xl p-6 shadow-lg"
       >
-        <div className="text-center text-gray-500">Loading appointments...</div>
+        <div className="text-center text-gray-500">Loading mental health appointments...</div>
       </motion.div>
     );
   }
@@ -87,7 +86,7 @@ const AppointmentsList = () => {
     >
       <div className="flex items-center justify-between mb-6">
         <h2 className="text-xl font-semibold text-gray-900">
-          {appointments.length > 0 ? 'Upcoming Appointments' : 'No Upcoming Appointments'}
+          {appointments.length > 0 ? 'Upcoming Mental Health Appointments' : 'No Upcoming Mental Health Appointments'}
         </h2>
         {appointments.length > 0 && (
           <Button variant="outline" size="sm">View All</Button>
@@ -105,10 +104,10 @@ const AppointmentsList = () => {
             <div className="flex items-start justify-between">
               <div>
                 <h3 className="font-semibold text-gray-900">
-                  {appointment.doctor.name}
+                  {appointment.therapist.name}
                 </h3>
                 <p className="text-blue-600 text-sm">
-                  {appointment.doctor.specialty}
+                  {appointment.therapist.specialty}
                 </p>
               </div>
               <div className="relative">
@@ -129,10 +128,9 @@ const AppointmentsList = () => {
                 <Clock className="w-4 h-4" />
                 <span className="text-sm">{appointment.appointmentTime}</span>
               </div>
-              {/* Optional: Add location if available in the schema */}
               <div className="flex items-center gap-2 text-gray-600">
                 <MapPin className="w-4 h-4" />
-                <span className="text-sm">TBD</span>
+                <span className="text-sm">Virtual Session</span>
               </div>
             </div>
 
@@ -164,4 +162,4 @@ const AppointmentsList = () => {
   );
 };
 
-export default AppointmentsList;
+export default MentalHealthList;

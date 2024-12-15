@@ -5,7 +5,8 @@ import { Search, Star, Clock, MapPin } from 'lucide-react';
 import Input from '../shared/Input';
 import Button from '../shared/Button';
 import DatePicker from '../shared/DatePicker';
-
+import axios from 'axios';
+import { toast } from 'react-toastify';
 const therapists = [
   {
     id: 1,
@@ -47,12 +48,60 @@ const MentalHealth = () => {
   const [selectedTherapist, setSelectedTherapist] = React.useState<number | null>(null);
   const [selectedDate, setSelectedDate] = React.useState<Date>();
   const [selectedTime, setSelectedTime] = React.useState<string>();
+  const [isBooking, setIsBooking] = React.useState(false);
 
   const filteredTherapists = therapists.filter(therapist =>
     therapist.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
     therapist.specialty.toLowerCase().includes(searchTerm.toLowerCase()) ||
     therapist.location.toLowerCase().includes(searchTerm.toLowerCase())
   );
+  const handleBookAppointment = async () => {
+    // Validation checks
+    if (!selectedDate || !selectedTherapist || !selectedTime) {
+      toast.error('Please complete all appointment details');
+      return;
+    }
+
+    // Get user ID from local storage
+    const userId = localStorage.getItem('userId');
+    if (!userId) {
+      toast.error('Please log in to book an appointment');
+      return;
+    }
+
+    // Find selected therapist details
+    const therapist = therapists.find(t => t.id === selectedTherapist);
+    if (!therapist) {
+      toast.error('Invalid therapist selection');
+      return;
+    }
+
+    setIsBooking(true);
+
+    try {
+      const response = await axios.post('/mental-health/book', {
+        userId,
+        therapistId: therapist.id,
+        therapistName: therapist.name,
+        therapistSpecialty: therapist.specialty,
+        appointmentDate: selectedDate.toISOString(),
+        appointmentTime: selectedTime
+      });
+
+      toast.success('Mental Health Appointment booked successfully!');
+
+      // Reset form
+      setSelectedDate(undefined);
+      setSelectedTherapist(null);
+      setSelectedTime(undefined);
+
+    } catch (error) {
+      console.error('Booking error', error);
+      toast.error('Failed to book appointment. Please try again.');
+    } finally {
+      setIsBooking(false);
+    }
+  };
 
   return (
     <div className="grid lg:grid-cols-3 gap-8">
@@ -150,27 +199,31 @@ const MentalHealth = () => {
         </div>
 
         {selectedTherapist && selectedDate && selectedTime && (
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="bg-white/80 backdrop-blur-sm rounded-2xl p-6 border border-gray-200"
-          >
-            <h3 className="text-xl font-semibold text-gray-900 mb-4">Appointment Summary</h3>
-            <div className="space-y-3 text-gray-600">
-              <div className="flex items-center gap-2">
-                <Clock className="w-5 h-5" />
-                <span>{format(selectedDate, 'PPP')}</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <Clock className="w-5 h-5" />
-                <span>{selectedTime}</span>
-              </div>
-            </div>
-            <Button className="w-full mt-6">
-              Confirm Booking
-            </Button>
-          </motion.div>
-        )}
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="bg-white/80 backdrop-blur-sm rounded-2xl p-6 border border-gray-200"
+      >
+        <h3 className="text-xl font-semibold text-gray-900 mb-4">Appointment Summary</h3>
+        <div className="space-y-3 text-gray-600">
+          <div className="flex items-center gap-2">
+            <Clock className="w-5 h-5" />
+            <span>{format(selectedDate, 'PPP')}</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <Clock className="w-5 h-5" />
+            <span>{selectedTime}</span>
+          </div>
+        </div>
+        <Button 
+          className="w-full mt-6"
+          onClick={handleBookAppointment}
+          isLoading={isBooking}
+        >
+          Confirm Booking
+        </Button>
+      </motion.div>
+    )}
       </div>
     </div>
   );

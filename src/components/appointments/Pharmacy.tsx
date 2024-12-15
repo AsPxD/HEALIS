@@ -3,7 +3,8 @@ import { motion } from 'framer-motion';
 import { Search, Package, Truck, Clock, AlertCircle } from 'lucide-react';
 import Input from '../shared/Input';
 import Button from '../shared/Button';
-
+import axios from 'axios';
+import { toast } from 'react-toastify';
 const medicines = [
   {
     id: 1,
@@ -43,7 +44,7 @@ const medicines = [
 const Pharmacy = () => {
   const [searchTerm, setSearchTerm] = React.useState("");
   const [cart, setCart] = React.useState<{ id: number; quantity: number }[]>([]);
-
+  const [isOrdering, setIsOrdering] = React.useState(false);
   const addToCart = (medicineId: number) => {
     setCart(prev => {
       const existing = prev.find(item => item.id === medicineId);
@@ -76,6 +77,50 @@ const Pharmacy = () => {
     const medicine = medicines.find(m => m.id === item.id);
     return sum + (medicine?.price || 0) * item.quantity;
   }, 0);
+  const handlePlaceOrder = async () => {
+    // Validation checks
+    if (cart.length === 0) {
+      toast.error('Your cart is empty');
+      return;
+    }
+
+    // Get user ID from local storage
+    const userId = localStorage.getItem('userId');
+    if (!userId) {
+      toast.error('Please log in to place an order');
+      return;
+    }
+
+    // Prepare order items
+    const orderItems = cart.map(cartItem => {
+      const medicine = medicines.find(m => m.id === cartItem.id);
+      return {
+        ...medicine,
+        quantity: cartItem.quantity
+      };
+    });
+
+    setIsOrdering(true);
+
+    try {
+      const response = await axios.post('/pharmacy/order', {
+        userId,
+        items: orderItems,
+        totalAmount
+      });
+
+      toast.success('Order placed successfully!');
+
+      // Reset cart
+      setCart([]);
+
+    } catch (error) {
+      console.error('Order placement error', error);
+      toast.error('Failed to place order. Please try again.');
+    } finally {
+      setIsOrdering(false);
+    }
+  };
 
   return (
     <div className="grid lg:grid-cols-3 gap-8">
@@ -184,7 +229,7 @@ const Pharmacy = () => {
                 </div>
               </div>
             </div>
-            <Button className="w-full mt-6">
+            <Button className="w-full mt-6" onClick={handlePlaceOrder} isLoading={isOrdering}>
               Proceed to Checkout
             </Button>
           </div>

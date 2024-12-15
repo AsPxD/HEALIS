@@ -23,6 +23,7 @@ const ChatInterface = () => {
   const { addMessage } = useChat();
   const [inputValue, setInputValue] = React.useState('');
   const [isListening, setIsListening] = React.useState(false);
+  const [isLoading, setIsLoading] = React.useState(false);
 
   const handleSend = async () => {
     if (!inputValue.trim()) return;
@@ -31,12 +32,18 @@ const ChatInterface = () => {
     addMessage(inputValue, false);
     const userMessage = inputValue;
     setInputValue('');
+    setIsLoading(true);
 
-    // Generate and add AI response
-    setTimeout(() => {
-      const response = generateResponse(userMessage);
+    try {
+      // Generate and add AI response
+      const response = await generateResponse(userMessage);
       addMessage(response, true);
-    }, 600);
+    } catch (error) {
+      console.error("Error generating response:", error);
+      addMessage("I'm sorry, there was an error processing your request.", true);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const handleVoice = () => {
@@ -53,7 +60,7 @@ const ChatInterface = () => {
       >
         <div className="h-[600px] flex flex-col">
           <ChatControls />
-          <ChatContainer />
+          <ChatContainer isLoading={isLoading} />
           <SuggestedQuestions
             questions={suggestedQuestions}
             onSelect={(question) => setInputValue(question)}
@@ -64,6 +71,7 @@ const ChatInterface = () => {
             onSend={handleSend}
             onStartVoice={handleVoice}
             isListening={isListening}
+            isLoading={isLoading}
           />
         </div>
       </motion.div>

@@ -1,6 +1,8 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { motion } from 'framer-motion';
 import { Plus, X, Clock } from 'lucide-react';
+import axios from 'axios';
+import { toast } from 'react-toastify';
 import Input from '../shared/Input';
 import Button from '../shared/Button';
 import DatePicker from '../shared/DatePicker';
@@ -17,28 +19,76 @@ const colors = [
 
 const AddMedicationForm = ({ onClose }: { onClose: () => void }) => {
   const { addMedication } = useReminders();
-  const [name, setName] = React.useState('');
-  const [dosage, setDosage] = React.useState('');
-  const [frequency, setFrequency] = React.useState('daily');
-  const [times, setTimes] = React.useState<string[]>(['08:00']);
-  const [startDate, setStartDate] = React.useState<Date>(new Date());
-  const [endDate, setEndDate] = React.useState<Date | undefined>();
-  const [instructions, setInstructions] = React.useState('');
-  const [selectedColor, setSelectedColor] = React.useState(colors[0]);
+  const [name, setName] = useState('');
+  const [dosage, setDosage] = useState('');
+  const [frequency, setFrequency] = useState('daily');
+  const [times, setTimes] = useState<string[]>(['08:00']);
+  const [startDate, setStartDate] = useState<Date>(new Date());
+  const [endDate, setEndDate] = useState<Date | undefined>();
+  const [instructions, setInstructions] = useState('');
+  const [selectedColor, setSelectedColor] = useState(colors[0]);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    addMedication({
+    
+    // Get userId from local storage or context
+    const userId = localStorage.getItem('userId');
+  
+    if (!userId) {
+      toast.error('Please log in to add a medication');
+      return;
+    }
+  
+    // Prepare medication data object
+    const medicationData = {
+      userId,
       name,
       dosage,
       frequency,
       times,
       startDate,
       endDate,
-      instructions,
-      color: selectedColor
-    });
-    onClose();
+      instructions: instructions || '',
+      color: selectedColor,
+    };
+  
+    setIsSubmitting(true);
+    try {
+      const response = await axios.post('/medications/add', medicationData);
+      
+      // Call local context method to update UI
+      addMedication({
+        name,
+        dosage,
+        frequency,
+        times,
+        startDate,
+        endDate,
+        instructions,
+        color: selectedColor
+      });
+      
+      toast.success('Medication added successfully');
+      resetForm();
+      onClose();
+    } catch (error) {
+      console.error('Error adding medication:', error);
+      toast.error('Failed to add medication. Please try again.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const resetForm = () => {
+    setName('');
+    setDosage('');
+    setFrequency('daily');
+    setTimes(['08:00']);
+    setStartDate(new Date());
+    setEndDate(undefined);
+    setInstructions('');
+    setSelectedColor(colors[0]);
   };
 
   const addTime = () => {
@@ -180,17 +230,27 @@ const AddMedicationForm = ({ onClose }: { onClose: () => void }) => {
           ))}
         </div>
       </div>
-
       <div className="flex gap-4">
-        <Button type="submit" className="flex-1">
-          Add Medication
+        <Button 
+          type="submit" 
+          className="flex-1"
+          disabled={isSubmitting}
+        >
+          {isSubmitting ? 'Adding...' : 'Add Medication'}
         </Button>
-        <Button type="button" variant="outline" onClick={onClose} className="flex-1">
+        <Button 
+          type="button" 
+          variant="outline" 
+          onClick={onClose} 
+          className="flex-1"
+          disabled={isSubmitting}
+        >
           Cancel
         </Button>
       </div>
     </motion.form>
   );
 };
+
 
 export default AddMedicationForm;

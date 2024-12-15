@@ -24,7 +24,12 @@ import AppointmentsList from '../components/dashboard/AppointmentsList';
 import HealthMetrics from '../components/dashboard/HealthMetrics';
 import MedicineReminders from '../components/dashboard/MedicineReminders';
 import DietPlanSummary from '../components/dashboard/DietPlanSummary';
-
+import LabTestsList from '../components/dashboard/LabTestsList';
+import VaccinationsList from '../components/dashboard/VaccinationsList';
+import PharmacyList from '../components/dashboard/PharmacyList';
+import MentalHealthList from '../components/dashboard/MentalHealthList';
+import HealthCheckupList from '../components/dashboard/HealthCheckupList';
+import NutritionistList from '../components/dashboard/NutritionistList';
 const menuItems = [
   { icon: LayoutDashboard, label: 'Dashboard', path: '/dashboard' },
   { icon: Calendar, label: 'Appointments', path: '/appointments' },
@@ -46,7 +51,7 @@ const Dashboard = () => {
     <div className="min-h-screen pt-16 bg-gray-50">
       <FloatingElements />
       <GradientBlob />
-      
+
       <div className="flex">
         {/* Sidebar */}
         <motion.div
@@ -59,7 +64,7 @@ const Dashboard = () => {
               <Activity className="w-8 h-8 text-blue-500" />
               <h1 className="text-xl font-bold">Healis</h1>
             </div>
-            
+
             <nav className="space-y-2">
               {menuItems.map((item) => (
                 <Link
@@ -81,15 +86,27 @@ const Dashboard = () => {
           <div className="max-w-7xl mx-auto space-y-8">
             <DashboardHeader />
             <QuickStats />
-            
+
             <div className="grid lg:grid-cols-2 gap-8">
               <AppointmentsList />
-              <HealthMetrics />
+              <LabTestsList />
             </div>
 
             <div className="grid lg:grid-cols-2 gap-8">
-              <MedicineReminders />
-              <DietPlanSummary />
+              <VaccinationsList />
+              <PharmacyList />
+            </div>
+            <div className="grid lg:grid-cols-2 gap-8">
+            <MentalHealthList />
+            <HealthCheckupList />
+            </div>
+            <div className="grid lg:grid-cols-2 gap-8">
+            <NutritionistList />
+            <MedicineReminders />
+            </div>
+            <div className="grid lg:grid-cols-2 gap-8">
+            <HealthMetrics />
+            <DietPlanSummary />
             </div>
           </div>
         </div>
@@ -99,3 +116,4 @@ const Dashboard = () => {
 };
 
 export default Dashboard;
+

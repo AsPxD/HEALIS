@@ -1,10 +1,11 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { motion } from 'framer-motion';
 import { MapPin, Clock, User } from 'lucide-react';
+import axios from 'axios';
+import { toast } from 'react-toastify';
 import Input from '../shared/Input';
 import Button from '../shared/Button';
 import DatePicker from '../shared/DatePicker';
-import { useReminders } from './ReminderContext';
 
 const colors = [
   'bg-rose-500',
@@ -16,27 +17,57 @@ const colors = [
 ];
 
 const AddAppointmentForm = ({ onClose }: { onClose: () => void }) => {
-  const { addAppointment } = useReminders();
-  const [title, setTitle] = React.useState('');
-  const [doctor, setDoctor] = React.useState('');
-  const [date, setDate] = React.useState<Date>(new Date());
-  const [time, setTime] = React.useState('09:00');
-  const [location, setLocation] = React.useState('');
-  const [notes, setNotes] = React.useState('');
-  const [selectedColor, setSelectedColor] = React.useState(colors[0]);
+  const [title, setTitle] = useState('');
+  const [doctor, setDoctor] = useState('');
+  const [date, setDate] = useState<Date>(new Date());
+  const [time, setTime] = useState('09:00');
+  const [location, setLocation] = useState('');
+  const [notes, setNotes] = useState('');
+  const [selectedColor, setSelectedColor] = useState(colors[0]);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    addAppointment({
+    
+    // Get userId from local storage or context
+    const userId = localStorage.getItem('userId'); // Or however you're storing the user ID
+  
+    if (!userId) {
+      toast.error('Please log in to create a reminder');
+      return;
+    }
+  
+    // Prepare reminder object
+    const reminderData = {
+      userId, // Add this
       title,
       doctor,
       date,
       time,
       location,
-      notes,
-      color: selectedColor
-    });
-    onClose();
+      notes: notes || '',
+      color: selectedColor,
+    };
+  
+    try {
+      const response = await axios.post('/reminders/add', reminderData);
+      toast.success('Appointment reminder added successfully');
+      resetForm();
+      onClose();
+    } catch (error) {
+      console.error('Error adding appointment reminder:', error);
+      toast.error('Failed to add appointment reminder. Please try again.');
+    }
+  };
+
+  const resetForm = () => {
+    setTitle('');
+    setDoctor('');
+    setDate(new Date());
+    setTime('09:00');
+    setLocation('');
+    setNotes('');
+    setSelectedColor(colors[0]);
   };
 
   return (
@@ -51,6 +82,7 @@ const AddAppointmentForm = ({ onClose }: { onClose: () => void }) => {
         value={title}
         onChange={(e) => setTitle(e.target.value)}
         required
+        placeholder="Enter appointment title"
       />
 
       <Input
@@ -59,6 +91,7 @@ const AddAppointmentForm = ({ onClose }: { onClose: () => void }) => {
         onChange={(e) => setDoctor(e.target.value)}
         icon={User}
         required
+        placeholder="Enter doctor's name"
       />
 
       <div className="grid grid-cols-2 gap-4">
@@ -93,6 +126,7 @@ const AddAppointmentForm = ({ onClose }: { onClose: () => void }) => {
         onChange={(e) => setLocation(e.target.value)}
         icon={MapPin}
         required
+        placeholder="Enter appointment location"
       />
 
       <div>
@@ -105,6 +139,7 @@ const AddAppointmentForm = ({ onClose }: { onClose: () => void }) => {
           className="w-full px-4 py-3 rounded-xl border border-gray-300 focus:ring-2 
             focus:ring-blue-500 focus:border-transparent transition-all duration-300"
           rows={3}
+          placeholder="Add any additional notes"
         />
       </div>
 
@@ -126,10 +161,20 @@ const AddAppointmentForm = ({ onClose }: { onClose: () => void }) => {
       </div>
 
       <div className="flex gap-4">
-        <Button type="submit" className="flex-1">
-          Add Appointment
+        <Button 
+          type="submit" 
+          className="flex-1"
+          disabled={isSubmitting}
+        >
+          {isSubmitting ? 'Adding...' : 'Add Appointment'}
         </Button>
-        <Button type="button" variant="outline" onClick={onClose} className="flex-1">
+        <Button 
+          type="button" 
+          variant="outline" 
+          onClick={onClose} 
+          className="flex-1"
+          disabled={isSubmitting}
+        >
           Cancel
         </Button>
       </div>
