@@ -4,6 +4,10 @@ const path = require('path')
 const cors = require('cors')
 const bodyparser = require('body-parser')
 const bcrypt = require('bcryptjs')
+const nodemailer = require('nodemailer')
+const handlebars = require('handlebars')
+const crypto = require('crypto')
+const otpStorage = new Map()
 const User = require('./models/SchemaRegister')
 // Add these to your existing server.js file
 const DoctorAppointment = require('./models/DoctorAppointmentSchema'); // Adjust path as needed
@@ -86,7 +90,7 @@ app.post('/auth', async (req, res) => {
 
         // Save user to database
         await newUser.save();
-
+        sendWelcomeEmail(email,fullName)
         res.status(201).json({
             message: 'User registered successfully',
             userId: newUser._id
@@ -207,7 +211,12 @@ app.post('/appointments/book', async (req, res) => {
 
     // Save appointment
     await newAppointment.save();
-
+    await transporter.sendMail({
+      from: '"HEALIS Healthcare" <care.healis@gmail.com>',
+      to: user.email,
+      subject: 'Appointment Confirmed - HEALIS Healthcare',
+      html: createAppointmentConfirmationTemplate(newAppointment)
+    });
     res.status(201).json({
       message: 'Appointment booked successfully',
       appointmentId: newAppointment._id
@@ -726,7 +735,12 @@ app.post('/health-checkup/book', async (req, res) => {
 
     // Save health checkup booking
     await newHealthCheckup.save();
-
+    await transporter.sendMail({
+      from: '"HEALIS Healthcare" <care.healis@gmail.com>',
+      to: user.email,
+      subject: 'Health Checkup Booking Confirmed - HEALIS Healthcare',
+      html: createHealthCheckupConfirmationTemplate(newHealthCheckup)
+    });
     res.status(201).json({
       message: 'Health Checkup booked successfully',
       healthCheckupId: newHealthCheckup._id
@@ -1298,6 +1312,456 @@ app.patch('/nutritionist/bookings/:bookingId/cancel', async (req, res) => {
     res.status(500).json({
       message: 'Server error during nutritionist booking cancellation',
       error: error.message
+    });
+  }
+});
+const transporter = nodemailer.createTransport({
+  service: 'gmail',
+  auth: {
+    user: 'care.healis@gmail.com', // Replace with your email
+    pass: 'mmij azgt thds pxya' // Replace with your app password
+  }
+});
+
+// Email template function
+function createWelcomeEmailTemplate(fullName) {
+  return `
+  <!DOCTYPE html>
+  <html lang="en">
+  <head>
+      <meta charset="UTF-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <title>Welcome to HEALIS</title>
+      <style>
+          body {
+              font-family: 'Arial', sans-serif;
+              line-height: 1.6;
+              color: #333;
+              max-width: 600px;
+              margin: 0 auto;
+              padding: 20px;
+              background-color: #f4f4f4;
+          }
+          .container {
+              background-color: white;
+              border-radius: 10px;
+              padding: 30px;
+              box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+          }
+          .header {
+              background: linear-gradient(to right, #4299E1, #48BB78);
+              color: white;
+              text-align: center;
+              padding: 20px;
+              border-radius: 10px 10px 0 0;
+          }
+          .content {
+              padding: 20px;
+          }
+          .cta-button {
+              display: block;
+              width: 200px;
+              margin: 20px auto;
+              padding: 12px;
+              background: linear-gradient(to right, #4299E1, #48BB78);
+              color: white;
+              text-align: center;
+              text-decoration: none;
+              border-radius: 5px;
+          }
+      </style>
+  </head>
+  <body>
+      <div class="container">
+          <div class="header">
+              <h1>Welcome to HEALIS</h1>
+              <p>Your Personalized Healthcare Companion</p>
+          </div>
+          <div class="content">
+              <h2>Hello ${fullName},</h2>
+              
+              <p>Congratulations! You've just taken the first step towards a healthier, more connected healthcare experience with HEALIS.</p>
+              
+              <p>Our platform is designed to make your healthcare journey smooth, personalized, and empowering. From booking appointments to tracking your medications, HEALIS is here to support you every step of the way.</p>
+              
+              <a href="http://localhost:5173/dashboard" class="cta-button">Explore Your Dashboard</a>
+              
+              <p>Some exciting features waiting for you:</p>
+              <ul>
+                  <li>Book doctor appointments with ease</li>
+                  <li>Track and manage your medications</li>
+                  <li>Schedule lab tests and vaccinations</li>
+                  <li>Set personalized health reminders</li>
+              </ul>
+              
+              <p>Welcome aboard! We're thrilled to be your healthcare partner.</p>
+              
+              <p>Best regards,<br>The HEALIS Team</p>
+          </div>
+      </div>
+  </body>
+  </html>
+  `;
+}
+
+// Function to send welcome email
+async function sendWelcomeEmail(email, fullName) {
+  try {
+    // Send email
+    await transporter.sendMail({
+      from: '"HEALIS Healthcare" <care.healis@gmail.com>', // Replace with your email
+      to: email,
+      subject: 'Welcome to HEALIS - Your Healthcare Companion',
+      html: createWelcomeEmailTemplate(fullName)
+    });
+
+    console.log(`Welcome email sent to ${email}`);
+  } catch (error) {
+    console.error('Error sending welcome email:', error);
+  }
+}
+app.post('/appointments/generate-otp', async (req, res) => {
+  try {
+    const { email } = req.body;
+
+    // Generate 6-digit OTP
+    const otp = crypto.randomInt(100000, 999999).toString();
+
+    // Store OTP with expiration (5 minutes)
+    otpStorage.set(email, {
+      otp,
+      createdAt: Date.now()
+    });
+
+    // Send OTP via email
+    await transporter.sendMail({
+      from: '"HEALIS Healthcare" <care.healis@gmail.com>',
+      to: email,
+      subject: 'OTP for Appointment Booking',
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 400px; margin: 0 auto;">
+          <h2>Your OTP for Appointment Booking</h2>
+          <p>Your One-Time Password (OTP) is:</p>
+          <h1 style="letter-spacing: 10px; text-align: center;">${otp}</h1>
+          <p>This OTP will expire in 5 minutes.</p>
+        </div>
+      `
+    });
+
+    res.status(200).json({
+      message: 'OTP sent successfully',
+      success: true
+    });
+
+  } catch (error) {
+    console.error('OTP Generation Error:', error);
+    res.status(500).json({
+      message: 'Error generating OTP',
+      success: false
+    });
+  }
+});
+
+// Verify OTP Route
+app.post('/appointments/verify-otp', async (req, res) => {
+  try {
+    const { email, otp } = req.body;
+
+    const storedOtp = otpStorage.get(email);
+
+    // Check if OTP exists and is valid
+    if (!storedOtp || storedOtp.otp !== otp) {
+      return res.status(400).json({
+        message: 'Invalid OTP',
+        success: false
+      });
+    }
+
+    // Check OTP expiration (5 minutes)
+    const currentTime = Date.now();
+    if (currentTime - storedOtp.createdAt > 5 * 60 * 1000) {
+      otpStorage.delete(email);
+      return res.status(400).json({
+        message: 'OTP has expired',
+        success: false
+      });
+    }
+
+    // Clear OTP after successful verification
+    otpStorage.delete(email);
+
+    res.status(200).json({
+      message: 'OTP verified successfully',
+      success: true
+    });
+
+  } catch (error) {
+    console.error('OTP Verification Error:', error);
+    res.status(500).json({
+      message: 'Error verifying OTP',
+      success: false
+    });
+  }
+});
+function createAppointmentConfirmationTemplate(appointment) {
+  return `
+  <!DOCTYPE html>
+  <html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <style>
+      body {
+        font-family: 'Arial', sans-serif;
+        line-height: 1.6;
+        color: #333;
+        max-width: 600px;
+        margin: 0 auto;
+        padding: 20px;
+        background-color: #f4f4f4;
+      }
+      .container {
+        background-color: white;
+        border-radius: 10px;
+        padding: 30px;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+      }
+      .header {
+        background: linear-gradient(to right, #4299E1, #48BB78);
+        color: white;
+        text-align: center;
+        padding: 20px;
+        border-radius: 10px 10px 0 0;
+      }
+      .content {
+        padding: 20px;
+      }
+      .appointment-details {
+        background-color: #f9f9f9;
+        border-radius: 5px;
+        padding: 15px;
+        margin: 20px 0;
+      }
+      .cta-button {
+        display: block;
+        width: 200px;
+        margin: 20px auto;
+        padding: 12px;
+        background: linear-gradient(to right, #4299E1, #48BB78);
+        color: white;
+        text-align: center;
+        text-decoration: none;
+        border-radius: 5px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <div class="header">
+        <h1>Appointment Confirmed</h1>
+      </div>
+      <div class="content">
+        <h2>Hello ${appointment.patient.fullName},</h2>
+        
+        <p>Your appointment has been successfully booked with HEALIS Healthcare. Here are the details:</p>
+        
+        <div class="appointment-details">
+          <h3>Appointment Details</h3>
+          <p><strong>Doctor:</strong> ${appointment.doctor.name}</p>
+          <p><strong>Specialty:</strong> ${appointment.doctor.specialty}</p>
+          <p><strong>Date:</strong> ${new Date(appointment.appointmentDate).toLocaleDateString()}</p>
+          <p><strong>Time:</strong> ${appointment.appointmentTime}</p>
+          <p><strong>Appointment ID:</strong> ${appointment._id}</p>
+        </div>
+        
+        <p>Please arrive 15 minutes before your scheduled time. If you need to reschedule or cancel, please contact our support team.</p>
+        
+        <a href="http://localhost:5173/appointments" class="cta-button">View Appointment</a>
+        
+        <p>Thank you for choosing HEALIS Healthcare. We're committed to providing you with the best medical care.</p>
+        
+        <p>Best regards,<br>The HEALIS Team</p>
+      </div>
+    </div>
+  </body>
+  </html>
+  `;
+}
+
+
+
+// Add this function to your server.js file, similar to createAppointmentConfirmationTemplate
+
+function createHealthCheckupConfirmationTemplate(healthCheckup) {
+  return `
+  <!DOCTYPE html>
+  <html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <style>
+      body {
+        font-family: 'Arial', sans-serif;
+        line-height: 1.6;
+        color: #333;
+        max-width: 600px;
+        margin: 0 auto;
+        padding: 20px;
+        background-color: #f4f4f4;
+      }
+      .container {
+        background-color: white;
+        border-radius: 10px;
+        padding: 30px;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+      }
+      .header {
+        background: linear-gradient(to right, #4299E1, #48BB78);
+        color: white;
+        text-align: center;
+        padding: 20px;
+        border-radius: 10px 10px 0 0;
+      }
+      .content {
+        padding: 20px;
+      }
+      .health-checkup-details {
+        background-color: #f9f9f9;
+        border-radius: 5px;
+        padding: 15px;
+        margin: 20px 0;
+      }
+      .cta-button {
+        display: block;
+        width: 200px;
+        margin: 20px auto;
+        padding: 12px;
+        background: linear-gradient(to right, #4299E1, #48BB78);
+        color: white;
+        text-align: center;
+        text-decoration: none;
+        border-radius: 5px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <div class="header">
+        <h1>Health Checkup Confirmed</h1>
+      </div>
+      <div class="content">
+        <h2>Hello ${healthCheckup.patient.fullName},</h2>
+        
+        <p>Your health checkup has been successfully booked with HEALIS Healthcare. Here are the details:</p>
+        
+        <div class="health-checkup-details">
+          <h3>Health Checkup Details</h3>
+          <p><strong>Package:</strong> ${healthCheckup.package.name}</p>
+          <p><strong>Location:</strong> ${healthCheckup.location}</p>
+          <p><strong>Booking Date:</strong> ${new Date(healthCheckup.bookingDate).toLocaleDateString()}</p>
+          <p><strong>Total Price:</strong> ₹${healthCheckup.totalPrice}</p>
+          <p><strong>Booking ID:</strong> ${healthCheckup._id}</p>
+          
+          <h4>Included Tests:</h4>
+          <ul>
+            ${healthCheckup.tests.map(test => `<li>${test}</li>`).join('')}
+          </ul>
+        </div>
+        
+        <p>Please arrive 15 minutes before your scheduled time. Bring this confirmation and any necessary identification.</p>
+        
+        <a href="http://localhost:5173/health-checkups" class="cta-button">View Booking</a>
+        
+        <p>If you need to reschedule or have any questions, please contact our support team.</p>
+        
+        <p>Thank you for choosing HEALIS Healthcare. We're committed to your health and well-being.</p>
+        
+        <p>Best regards,<br>The HEALIS Team</p>
+      </div>
+    </div>
+  </body>
+  </html>
+  `;
+}
+// Health Checkup OTP Generation Route
+app.post('/health-checkup/generate-otp', async (req, res) => {
+  try {
+    const { email } = req.body;
+
+    // Generate 6-digit OTP
+    const otp = crypto.randomInt(100000, 999999).toString();
+
+    // Store OTP with expiration (5 minutes)
+    otpStorage.set(email, {
+      otp,
+      createdAt: Date.now()
+    });
+
+    // Send OTP via email
+    await transporter.sendMail({
+      from: '"HEALIS Healthcare" <care.healis@gmail.com>',
+      to: email,
+      subject: 'OTP for Health Checkup Booking',
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 400px; margin: 0 auto;">
+          <h2>Your OTP for Health Checkup Booking</h2>
+          <p>Your One-Time Password (OTP) is:</p>
+          <h1 style="letter-spacing: 10px; text-align: center;">${otp}</h1>
+          <p>This OTP will expire in 5 minutes.</p>
+        </div>
+      `
+    });
+
+    res.status(200).json({
+      message: 'OTP sent successfully',
+      success: true
+    });
+
+  } catch (error) {
+    console.error('Health Checkup OTP Generation Error:', error);
+    res.status(500).json({
+      message: 'Error generating OTP',
+      success: false
+    });
+  }
+});
+
+// Health Checkup OTP Verification Route
+app.post('/health-checkup/verify-otp', async (req, res) => {
+  try {
+    const { email, otp } = req.body;
+
+    const storedOtp = otpStorage.get(email);
+
+    // Check if OTP exists and is valid
+    if (!storedOtp || storedOtp.otp !== otp) {
+      return res.status(400).json({
+        message: 'Invalid OTP',
+        success: false
+      });
+    }
+
+    // Check OTP expiration (5 minutes)
+    const currentTime = Date.now();
+    if (currentTime - storedOtp.createdAt > 5 * 60 * 1000) {
+      otpStorage.delete(email);
+      return res.status(400).json({
+        message: 'OTP has expired',
+        success: false
+      });
+    }
+
+    // Clear OTP after successful verification
+    otpStorage.delete(email);
+
+    res.status(200).json({
+      message: 'OTP verified successfully',
+      success: true
+    });
+
+  } catch (error) {
+    console.error('Health Checkup OTP Verification Error:', error);
+    res.status(500).json({
+      message: 'Error verifying OTP',
+      success: false
     });
   }
 });

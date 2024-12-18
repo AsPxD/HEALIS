@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { motion } from 'framer-motion';
 import { format } from 'date-fns';
 import { MapPin, Star, Clock, Search } from 'lucide-react';
@@ -7,6 +7,7 @@ import Button from '../shared/Button';
 import DatePicker from '../shared/DatePicker';
 import { toast } from 'react-toastify';
 import axios from 'axios';
+
 const doctors = [
   {
     id: 1,
@@ -44,12 +45,14 @@ const doctors = [
 ];
 
 const DoctorAppointment = () => {
-  const [selectedDate, setSelectedDate] = React.useState<Date>();
-  const [selectedDoctor, setSelectedDoctor] = React.useState<number>();
-  const [selectedTime, setSelectedTime] = React.useState<string>();
-  const [searchTerm, setSearchTerm] = React.useState("");
-  const [selectedSpecialty, setSelectedSpecialty] = React.useState("");
-  const [isBooking, setIsBooking] = React.useState(false);
+  const [selectedDate, setSelectedDate] = useState<Date>();
+  const [selectedDoctor, setSelectedDoctor] = useState<number>();
+  const [selectedTime, setSelectedTime] = useState<string>();
+  const [searchTerm, setSearchTerm] = useState("");
+  const [selectedSpecialty, setSelectedSpecialty] = useState("");
+  const [isBooking, setIsBooking] = useState(false);
+  const [otpSent, setOtpSent] = useState(false);
+  const [otp, setOtp] = useState('');
 
   const filteredDoctors = doctors.filter(doctor => {
     const matchesSearch = doctor.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -57,6 +60,7 @@ const DoctorAppointment = () => {
     const matchesSpecialty = !selectedSpecialty || doctor.specialty === selectedSpecialty;
     return matchesSearch && matchesSpecialty;
   });
+
   const handleBookAppointment = async () => {
     // Validation checks
     if (!selectedDate || !selectedDoctor || !selectedTime) {
@@ -92,10 +96,12 @@ const DoctorAppointment = () => {
 
       toast.success('Appointment booked successfully!');
 
-      // Optional: Reset form or navigate
+      // Reset form
       setSelectedDate(undefined);
       setSelectedDoctor(undefined);
       setSelectedTime(undefined);
+      setOtpSent(false);
+      setOtp('');
 
     } catch (error) {
       console.error('Booking error', error);
@@ -104,6 +110,70 @@ const DoctorAppointment = () => {
       setIsBooking(false);
     }
   };
+
+  const handleSendOTP = async () => {
+    // Validation checks
+    if (!selectedDate || !selectedDoctor || !selectedTime) {
+      toast.error('Please complete all appointment details');
+      return;
+    }
+
+    // Get user ID from local storage
+    const userId = localStorage.getItem('userId');
+    if (!userId) {
+      toast.error('Please log in to book an appointment');
+      return;
+    }
+
+    // Find selected doctor details
+    const doctor = doctors.find(d => d.id === selectedDoctor);
+    if (!doctor) {
+      toast.error('Invalid doctor selection');
+      return;
+    }
+
+    try {
+      // Fetch user email
+      const userResponse = await axios.get(`/auth/${userId}`);
+      
+      // Send OTP
+      const otpResponse = await axios.post('/appointments/generate-otp', {
+        email: userResponse.data.email
+      });
+
+      if (otpResponse.data.success) {
+        setOtpSent(true);
+        toast.success('OTP sent to your email');
+      }
+    } catch (error) {
+      console.error('OTP Sending Error', error);
+      toast.error('Failed to send OTP. Please try again.');
+    }
+  };
+
+  const handleVerifyOTP = async () => {
+    try {
+      // Fetch user email
+      const userId = localStorage.getItem('userId');
+      const userResponse = await axios.get(`/auth/${userId}`);
+
+      // Verify OTP
+      const verifyResponse = await axios.post('/appointments/verify-otp', {
+        email: userResponse.data.email,
+        otp
+      });
+
+      if (verifyResponse.data.success) {
+        // Proceed with booking
+        await handleBookAppointment();
+        setOtpSent(false);
+      }
+    } catch (error) {
+      console.error('OTP Verification Error', error);
+      toast.error('Invalid or expired OTP');
+    }
+  };
+
   return (
     <div className="grid lg:grid-cols-3 gap-8">
       <div className="lg:col-span-2 space-y-6">
@@ -232,13 +302,31 @@ const DoctorAppointment = () => {
                 <span>{selectedTime}</span>
               </div>
             </div>
-            <Button
-              className="w-full mt-6"
-              onClick={handleBookAppointment}
-              isLoading={isBooking}
-            >
-              Confirm Booking
-            </Button>
+            
+            {!otpSent ? (
+              <Button 
+                className="w-full mt-6" 
+                onClick={handleSendOTP}
+              >
+                Send OTP to Confirm Booking
+              </Button>
+            ) : (
+              <div className="space-y-4">
+                <Input 
+                  label="Enter OTP" 
+                  type="text" 
+                  value={otp} 
+                  onChange={(e) => setOtp(e.target.value)} 
+                  placeholder="Enter 6-digit OTP" 
+                />
+                <Button 
+                  className="w-full" 
+                  onClick={handleVerifyOTP}
+                >
+                  Verify OTP and Book
+                </Button>
+              </div>
+            )}
           </motion.div>
         )}
       </div>
