@@ -1,117 +1,169 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
-import { Calendar, Clock, CreditCard, User } from 'lucide-react';
+import { Calendar, Clock, MapPin, Star, Mail, KeyRound } from 'lucide-react';
 import Button from '../shared/Button';
 import DatePicker from '../shared/DatePicker';
 
-// Nutritionist data type
-interface Nutritionist {
-  id: number;
+interface Doctor {
+  _id: string;
   name: string;
-  specialization: string;
-  experience: string;
-  price: number;
-  image: string;
+  email: string;
+  experience: number;
+  location: string;
+  photo: string;
+  specialities: string[];
+  qualifications: string[];
+  rating?: number;
+  reviews?: number;
+  price?: number;
+  availability?: {
+    days: string[];
+    startTime: string;
+    endTime: string;
+  };
 }
 
-const nutritionists: Nutritionist[] = [
-  {
-    id: 1,
-    name: "Dr. Priya Sharma",
-    specialization: "Clinical Nutritionist",
-    experience: "12 years",
-    price: 1500,
-    image: "https://images.unsplash.com/photo-1559839734-2b71ea197ec2?auto=format&fit=crop&q=80&w=300"
-  },
-  {
-    id: 2,
-    name: "Dr. Rahul Mehta",
-    specialization: "Sports Nutritionist",
-    experience: "10 years",
-    price: 1800,
-    image: "https://images.unsplash.com/photo-1537368910025-700350fe46c7?auto=format&fit=crop&q=80&w=300"
-  },
-  {
-    id: 3,
-    name: "Dr. Anjali Desai",
-    specialization: "Pediatric Nutritionist",
-    experience: "15 years",
-    price: 2000,
-    image: "https://images.unsplash.com/photo-1594824476967-48c8b964273f?auto=format&fit=crop&q=80&w=300"
-  }
-];
-
 const NutritionistBooking: React.FC = () => {
-  const [selectedNutritionist, setSelectedNutritionist] = useState<number | null>(null);
-  const [selectedDate, setSelectedDate] = useState<Date | undefined>();
-  const [selectedTime, setSelectedTime] = useState<string | undefined>();
+  const [doctors, setDoctors] = useState<Doctor[]>([]);
+  const [selectedDoctor, setSelectedDoctor] = useState<string | null>(null);
+  const [selectedDate, setSelectedDate] = useState<Date>();
+  const [selectedTime, setSelectedTime] = useState<string>();
+  const [showOTPInput, setShowOTPInput] = useState(false);
   const [showPayment, setShowPayment] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const [paymentDetails, setPaymentDetails] = useState({
-    cardNumber: '',
-    expiryDate: '',
-    cvv: ''
-  });
-
+  const [userEmail, setUserEmail] = useState('');
+  const [otp, setOTP] = useState('');
+  const [otpError, setOtpError] = useState('');
   const navigate = useNavigate();
+
+  // List of nutrition-related specialties to include
+  const nutritionSpecialties = [
+    'nutritionist',
+    'dietitian',
+    'nutrition',
+    'diet',
+    'sports nutrition',
+    'clinical nutrition',
+    'pediatric nutrition'
+  ];
+
+  useEffect(() => {
+    const fetchDoctors = async () => {
+      try {
+        const response = await axios.get('http://localhost:8000/api/verified-doctors');
+        const nutritionDoctors = response.data.filter((doctor: Doctor) => 
+          doctor.specialities.some(specialty => 
+            nutritionSpecialties.some(included => 
+              specialty.toLowerCase().includes(included.toLowerCase())
+            )
+          )
+        );
+        
+        const enhancedDoctors = nutritionDoctors.map((doctor: Doctor) => ({
+          ...doctor,
+          rating: doctor.rating || 4.5,
+          reviews: doctor.reviews || Math.floor(Math.random() * 300),
+          price: doctor.price || Math.floor(Math.random() * 1000) + 1000,
+          image: doctor.photo || 'https://via.placeholder.com/300'
+        }));
+        
+        setDoctors(enhancedDoctors);
+      } catch (error) {
+        console.error('Error fetching doctors:', error);
+      }
+    };
+
+    fetchDoctors();
+  }, []);
 
   const availableTimes = [
     "09:00", "10:00", "11:00", "14:00", "15:00", "16:00"
   ];
 
-  const handlePaymentInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const { name, value } = e.target;
-    setPaymentDetails(prev => ({
-      ...prev,
-      [name]: value
-    }));
+  const handleGenerateOTP = async () => {
+    setIsLoading(true);
+    setOtpError('');
+    
+    try {
+      const response = await axios.post('/nutritionist/generate-otp', {
+        email: userEmail
+      });
+      
+      if (response.data.success) {
+        setShowOTPInput(true);
+      }
+    } catch (error) {
+      setOtpError('Failed to send OTP. Please try again.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleVerifyOTP = async () => {
+    setIsLoading(true);
+    setOtpError('');
+    
+    try {
+      const response = await axios.post('/nutritionist/verify-otp', {
+        email: userEmail,
+        otp: otp
+      });
+      
+      if (response.data.success) {
+        setShowPayment(true);
+        setShowOTPInput(false);
+      }
+    } catch (error: any) {
+      setOtpError(error.response?.data?.message || 'Failed to verify OTP');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const handleBooking = async () => {
     setIsLoading(true);
     try {
-      // Get user ID from localStorage or authentication context
       const userId = localStorage.getItem('userId');
-      
-      if (!userId) {
-        throw new Error('User not authenticated');
+      if (!userId || !selectedDoctor || !selectedDate || !selectedTime) {
+        throw new Error('Missing booking details');
       }
-
-      const selectedNutritionistDetails = nutritionists.find(n => n.id === selectedNutritionist);
-
-      if (!selectedNutritionistDetails || !selectedDate || !selectedTime) {
-        throw new Error('Incomplete booking details');
+  
+      const doctor = doctors.find(d => d._id === selectedDoctor);
+      if (!doctor) {
+        throw new Error('Invalid doctor selection');
       }
-
-      const response = await axios.post('/nutritionist/book', {
+  
+      const response = await axios.post('http://localhost:3000/nutritionist/book', {
         userId,
-        nutritionistId: selectedNutritionist,
-        nutritionistName: selectedNutritionistDetails.name,
-        nutritionistSpecialty: selectedNutritionistDetails.specialization,
-        bookingDate: selectedDate,
+        nutritionistId: selectedDoctor,
+        nutritionistName: doctor.name,
+        nutritionistSpecialty: doctor.specialities.join(', '),
+        bookingDate: selectedDate.toISOString(), // Convert to ISO string
         bookingTime: selectedTime,
-        totalPrice: selectedNutritionistDetails.price
+        totalPrice: doctor.price || 1500 // Default price if not specified
       });
-
-      // Reset states
+  
+      // Reset states after successful booking
       setIsLoading(false);
       setShowPayment(false);
       
-      // Show success message
-      alert(response.data.message);
-      
-      // Navigate to bookings or dashboard
+      // Navigate to bookings page or show success message
       navigate('/bookings');
-
     } catch (error) {
-      console.error('Booking Error:', error);
-      alert('Failed to book appointment. Please try again.');
+      console.error('Nutritionist Booking Error:', error.response?.data || error.message);
+      
+      // Show detailed error message to user
+      alert(
+        error.response?.data?.message || 
+        error.message || 
+        'Failed to book nutritionist appointment'
+      );
+      
       setIsLoading(false);
     }
   };
-
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
@@ -123,31 +175,43 @@ const NutritionistBooking: React.FC = () => {
         <h2 className="text-xl font-semibold text-gray-900 mb-6">Book a Nutritionist</h2>
         
         <div className="space-y-4">
-          {nutritionists.map((nutritionist) => (
+          {doctors.map((doctor) => (
             <motion.div
-              key={nutritionist.id}
+              key={doctor._id}
               whileHover={{ scale: 1.02 }}
               className={`p-4 rounded-xl cursor-pointer transition-all duration-300
-                ${selectedNutritionist === nutritionist.id
+                ${selectedDoctor === doctor._id
                   ? 'bg-green-50 border-2 border-green-500'
                   : 'bg-gray-50 border border-gray-200 hover:border-green-200'
                 }`}
-              onClick={() => setSelectedNutritionist(nutritionist.id)}
+              onClick={() => setSelectedDoctor(doctor._id)}
             >
-              {/* Nutritionist card details remain the same */}
               <div className="flex items-center gap-4">
                 <img
-                  src={nutritionist.image}
-                  alt={nutritionist.name}
+                  src={doctor.image}
+                  alt={doctor.name}
                   className="w-16 h-16 rounded-xl object-cover"
                 />
                 <div className="flex-1">
-                  <h3 className="font-semibold text-gray-900">{nutritionist.name}</h3>
-                  <p className="text-green-600">{nutritionist.specialization}</p>
-                  <p className="text-sm text-gray-500">{nutritionist.experience} experience</p>
+                  <div className="flex justify-between">
+                    <div>
+                      <h3 className="font-semibold text-gray-900">{doctor.name}</h3>
+                      <p className="text-green-600">{doctor.specialities.join(', ')}</p>
+                      <p className="text-sm text-gray-500">{doctor.experience} years experience</p>
+                    </div>
+                    <div className="flex items-center gap-1 text-amber-500">
+                      <Star className="w-5 h-5 fill-current" />
+                      <span className="font-medium">{doctor.rating}</span>
+                      <span className="text-gray-500">({doctor.reviews})</span>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 mt-2 text-gray-600">
+                    <MapPin className="w-4 h-4" />
+                    <span className="text-sm">{doctor.location}</span>
+                  </div>
                 </div>
                 <div className="text-right">
-                  <p className="text-lg font-bold text-gray-900">₹{nutritionist.price}</p>
+                  <p className="text-lg font-bold text-gray-900">₹{doctor.price}</p>
                   <p className="text-sm text-gray-500">per session</p>
                 </div>
               </div>
@@ -157,7 +221,7 @@ const NutritionistBooking: React.FC = () => {
       </div>
 
       {/* Date and Time Selection */}
-      {selectedNutritionist && (
+      {selectedDoctor && (
         <motion.div
           initial={{ opacity: 0, height: 0 }}
           animate={{ opacity: 1, height: 'auto' }}
@@ -195,80 +259,79 @@ const NutritionistBooking: React.FC = () => {
         </motion.div>
       )}
 
-      {/* Payment Section */}
-      {selectedNutritionist && selectedDate && selectedTime && !showPayment && (
-        <Button
-          className="w-full"
-          onClick={() => setShowPayment(true)}
+      {/* Email and OTP Section */}
+      {selectedDoctor && selectedDate && selectedTime && !showPayment && (
+        <motion.div
+          initial={{ opacity: 0, height: 0 }}
+          animate={{ opacity: 1, height: 'auto' }}
+          className="bg-white rounded-2xl p-6 shadow-lg space-y-4"
         >
-          Proceed to Payment
-        </Button>
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">Verify Email</h3>
+          
+          <div className="space-y-4">
+            <div className="flex items-center gap-2">
+              <Mail className="w-5 h-5 text-gray-500" />
+              <input
+                type="email"
+                value={userEmail}
+                onChange={(e) => setUserEmail(e.target.value)}
+                placeholder="Enter your email"
+                className="flex-1 p-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+              />
+              <Button
+                onClick={handleGenerateOTP}
+                disabled={!userEmail || showOTPInput}
+                isLoading={isLoading}
+                className="whitespace-nowrap"
+              >
+                Send OTP
+              </Button>
+            </div>
+
+            {showOTPInput && (
+              <div className="space-y-4">
+                <div className="flex items-center gap-2">
+                  <KeyRound className="w-5 h-5 text-gray-500" />
+                  <input
+                    type="text"
+                    value={otp}
+                    onChange={(e) => setOTP(e.target.value)}
+                    placeholder="Enter OTP"
+                    className="flex-1 p-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+                    maxLength={6}
+                  />
+                  <Button
+                    onClick={handleVerifyOTP}
+                    disabled={!otp}
+                    isLoading={isLoading}
+                  >
+                    Verify OTP
+                  </Button>
+                </div>
+                {otpError && (
+                  <p className="text-red-500 text-sm">{otpError}</p>
+                )}
+              </div>
+            )}
+          </div>
+        </motion.div>
       )}
 
-      {/* Payment Form */}
+      {/* Payment Section */}
       {showPayment && (
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           className="bg-white rounded-2xl p-6 shadow-lg"
         >
-          <h3 className="text-lg font-semibold text-gray-900 mb-6">Payment Details</h3>
-          
-          <form onSubmit={(e) => { e.preventDefault(); handleBooking(); }} className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Card Number
-              </label>
-              <input
-                type="text"
-                name="cardNumber"
-                placeholder="1234 5678 9012 3456"
-                value={paymentDetails.cardNumber}
-                onChange={handlePaymentInputChange}
-                className="w-full px-4 py-3 rounded-xl border border-gray-300"
-                required
-              />
-            </div>
-            
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Expiry Date
-                </label>
-                <input
-                  type="text"
-                  name="expiryDate"
-                  placeholder="MM/YY"
-                  value={paymentDetails.expiryDate}
-                  onChange={handlePaymentInputChange}
-                  className="w-full px-4 py-3 rounded-xl border border-gray-300"
-                  required
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  CVV
-                </label>
-                <input
-                  type="text"
-                  name="cvv"
-                  placeholder="123"
-                  value={paymentDetails.cvv}
-                  onChange={handlePaymentInputChange}
-                  className="w-full px-4 py-3 rounded-xl border border-gray-300"
-                  required
-                />
-              </div>
-            </div>
-
-            <Button
-              type="submit"
-              className="w-full"
-              isLoading={isLoading}
-            >
-              Pay ₹{nutritionists.find(n => n.id === selectedNutritionist)?.price}
-            </Button>
-          </form>
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">Payment Details</h3>
+          <Button
+            onClick={handleBooking}
+            className="w-full"
+            isLoading={isLoading}
+          >
+            Pay ₹{doctors.find(d => d._id === selectedDoctor)?.price}
+          </Button>
         </motion.div>
       )}
     </motion.div>

@@ -13,14 +13,12 @@ const NutritionistBookingSchema = new mongoose.Schema({
     },
     email: {
       type: String,
-      required: true,
-      lowercase: true,
-      trim: true
+      required: true
     }
   },
   nutritionist: {
     id: {
-      type: Number,
+      type: mongoose.Schema.Types.ObjectId,
       required: true
     },
     name: {
@@ -38,8 +36,7 @@ const NutritionistBookingSchema = new mongoose.Schema({
   },
   bookingTime: {
     type: String,
-    required: true,
-    match: [/^([01]\d|2[0-3]):([0-5]\d)$/, 'Please enter a valid time in HH:MM format']
+    required: true
   },
   totalPrice: {
     type: Number,
@@ -47,11 +44,13 @@ const NutritionistBookingSchema = new mongoose.Schema({
   },
   status: {
     type: String,
-    enum: ['Scheduled', 'Confirmed', 'Completed', 'Cancelled'],
+    enum: ['Scheduled', 'Completed', 'Cancelled'],
     default: 'Scheduled'
+  },
+  createdAt: {
+    type: Date,
+    default: Date.now
   }
-}, {
-  timestamps: true
 });
 
 module.exports = mongoose.model('NutritionistBooking', NutritionistBookingSchema);

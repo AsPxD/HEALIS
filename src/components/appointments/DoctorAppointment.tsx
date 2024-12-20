@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { format } from 'date-fns';
@@ -9,7 +8,7 @@ import DatePicker from '../shared/DatePicker';
 import { toast } from 'react-toastify';
 import axios from 'axios';
 
-// Define interface for Doctor
+// Updated Doctor interface to include all relevant fields
 interface Doctor {
   _id: string;
   name: string;
@@ -17,10 +16,15 @@ interface Doctor {
   experience: number;
   location: string;
   photo: string;
-  specialty?: string;
+  specialities: string[];
+  qualifications: string[];
   rating?: number;
   reviews?: number;
-  availability?: string[];
+  availability?: {
+    days: string[];
+    startTime: string;
+    endTime: string;
+  };
 }
 
 const DoctorAppointment = () => {
@@ -31,25 +35,52 @@ const DoctorAppointment = () => {
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedSpecialty, setSelectedSpecialty] = useState("");
   const [isBooking, setIsBooking] = useState(false);
-  
-  // OTP States
   const [showOTPModal, setShowOTPModal] = useState<boolean>(false);
   const [email, setEmail] = useState<string>("");
   const [otp, setOtp] = useState<string>("");
 
-  // Fetch Verified Doctors
+  // List of specialties to exclude
+  const excludedSpecialties = [
+    'psychiatrist',
+    'psychologist',
+    'mental health',
+    'counselor',
+    'therapist',
+    'nutritionist',
+    'dietitian',
+    'mental healthcare',
+    'psychiatric',
+    'psychological',
+    'mental wellness',
+    'behavioral health',
+    'nutrition',
+    'diet'
+  ];
+
+  // Updated fetchDoctors to handle actual doctor data and filter excluded specialties
   useEffect(() => {
     const fetchDoctors = async () => {
       try {
         const response = await axios.get('http://localhost:8000/api/verified-doctors');
-        // Enhance doctors with additional fields for UI consistency
-        const enhancedDoctors = response.data.map((doctor: Doctor) => ({
+        const filteredDoctors = response.data.filter((doctor: Doctor) => {
+          // Check if none of the doctor's specialities match the excluded ones
+          return !doctor.specialities.some(specialty => 
+            excludedSpecialties.some(excluded => 
+              specialty.toLowerCase().includes(excluded.toLowerCase())
+            )
+          );
+        });
+        
+        const enhancedDoctors = filteredDoctors.map((doctor: Doctor) => ({
           ...doctor,
-          rating: 4.5, // Default rating
-          reviews: Math.floor(Math.random() * 300), // Random reviews
-          availability: ['09:00', '10:00', '14:00', '16:00'], // Default availability
-          specialty: doctor.specialty || 'General Practitioner', // Default specialty if not provided
-          image: doctor.photo || 'https://via.placeholder.com/300' // Placeholder if no photo
+          rating: 4.5, // Default rating for now
+          reviews: Math.floor(Math.random() * 300), // Random reviews for demo
+          availability: doctor.availability?.days.map(day => {
+            return [doctor.availability.startTime, 
+                   addHours(doctor.availability.startTime, 1),
+                   addHours(doctor.availability.startTime, 2)];
+          }).flat() || [],
+          image: doctor.photo || 'https://via.placeholder.com/300'
         }));
         setDoctors(enhancedDoctors);
       } catch (error) {
@@ -61,15 +92,31 @@ const DoctorAppointment = () => {
     fetchDoctors();
   }, []);
 
-  // Rest of the code remains the same as in the previous implementation
-  // Filter Doctors
+  // Updated filter to use specialities array
   const filteredDoctors = doctors.filter(doctor => {
     const matchesSearch = 
       doctor.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (doctor.location && doctor.location.toLowerCase().includes(searchTerm.toLowerCase()));
-    const matchesSpecialty = !selectedSpecialty || doctor.specialty === selectedSpecialty;
+      (doctor.location && doctor.location.toLowerCase().includes(searchTerm.toLowerCase())) ||
+      doctor.specialities.some(s => s.toLowerCase().includes(searchTerm.toLowerCase()));
+    
+    const matchesSpecialty = !selectedSpecialty || 
+      doctor.specialities.includes(selectedSpecialty);
+    
     return matchesSearch && matchesSpecialty;
   });
+
+  // Helper function to add hours to time string
+  const addHours = (time: string, hours: number): string => {
+    const [h, m] = time.split(':');
+    const newHour = (parseInt(h) + hours) % 24;
+    return `${newHour.toString().padStart(2, '0')}:${m}`;
+  };
+
+  // Get unique specialties from filtered doctors
+  const allSpecialties = Array.from(
+    new Set(doctors.flatMap(doctor => doctor.specialities))
+  ).sort();
+
 
   // Generate OTP Handler
   const handleGenerateOTP = async () => {
@@ -196,14 +243,12 @@ const handleBookAppointment = async () => {
 };
   return (
     <div className="grid lg:grid-cols-3 gap-8 relative">
-      {/* Existing code remains the same */}
-      {/* Just replace doctors with filteredDoctors in the mapping */}
       <div className="lg:col-span-2 space-y-6">
         <div className="grid md:grid-cols-2 gap-4">
           <Input
             label=""
             type="text"
-            placeholder="Search doctors, locations..."
+            placeholder="Search doctors, specialities, locations..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             icon={Search}
@@ -215,8 +260,8 @@ const handleBookAppointment = async () => {
             className="px-4 py-3 rounded-xl border border-gray-300 bg-white/50 backdrop-blur-sm
               focus:ring-2 focus:ring-violet-500 focus:border-transparent transition-all duration-300"
           >
-            <option value="">All Specialties</option>
-            {Array.from(new Set(doctors.map(d => d.specialty))).map(specialty => (
+            <option value="">All Specialities</option>
+            {allSpecialties.map(specialty => (
               <option key={specialty} value={specialty}>{specialty}</option>
             ))}
           </select>
@@ -235,7 +280,6 @@ const handleBookAppointment = async () => {
                 }`}
               onClick={() => setSelectedDoctor(doctor._id)}
             >
-              {/* Existing doctor card layout */}
               <div className="flex items-start gap-6">
                 <div className="w-24 h-24 flex-shrink-0">
                   <img
@@ -248,7 +292,8 @@ const handleBookAppointment = async () => {
                   <div className="flex justify-between items-start">
                     <div>
                       <h3 className="text-xl font-semibold text-gray-900">{doctor.name}</h3>
-                      <p className="text-violet-600">{doctor.specialty}</p>
+                      <p className="text-violet-600">{doctor.specialities.join(', ')}</p>
+                      <p className="text-gray-500 text-sm mt-1">{doctor.qualifications.join(', ')}</p>
                     </div>
                     <div className="flex items-center gap-1 text-amber-500">
                       <Star className="w-5 h-5 flex-shrink-0 fill-current" />
@@ -279,7 +324,10 @@ const handleBookAppointment = async () => {
                         {doctor.availability?.map((time) => (
                           <button
                             key={time}
-                            onClick={() => setSelectedTime(time)}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setSelectedTime(time);
+                            }}
                             className={`px-4 py-2 rounded-lg transition-all duration-300
                               ${selectedTime === time
                                 ? 'bg-violet-500 text-white'
@@ -298,7 +346,6 @@ const handleBookAppointment = async () => {
           ))}
         </div>
       </div>
-
 
       <div className="space-y-6">
         <div className="bg-white/80 backdrop-blur-sm rounded-2xl p-6 border border-gray-200">

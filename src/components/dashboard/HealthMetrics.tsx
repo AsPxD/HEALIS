@@ -1,44 +1,143 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { Activity, ArrowUp, ArrowDown } from 'lucide-react';
+import axios from 'axios';
 
-const data = [
-  { date: '03/01', weight: 70, bloodPressure: 120, heartRate: 72 },
-  { date: '03/02', weight: 69.8, bloodPressure: 118, heartRate: 74 },
-  { date: '03/03', weight: 69.5, bloodPressure: 122, heartRate: 71 },
-  { date: '03/04', weight: 69.7, bloodPressure: 119, heartRate: 73 },
-  { date: '03/05', weight: 69.3, bloodPressure: 121, heartRate: 70 },
-  { date: '03/06', weight: 69.1, bloodPressure: 120, heartRate: 72 },
-  { date: '03/07', weight: 69.0, bloodPressure: 118, heartRate: 71 },
-];
+// Interface for Prescription data
+interface Prescription {
+  _id: string;
+  date: string;
+  weight?: number;
+  bloodPressure?: string;
+  heartRate?: string;
+  patientName?: string;
+}
 
-const metrics = [
-  {
-    label: 'Weight',
-    value: '69.0 kg',
-    change: '-1.0',
-    trend: 'down',
-    color: 'text-green-500'
-  },
-  {
-    label: 'Blood Pressure',
-    value: '118/78',
-    change: '-2',
-    trend: 'down',
-    color: 'text-green-500'
-  },
-  {
-    label: 'Heart Rate',
-    value: '71 bpm',
-    change: '+1',
-    trend: 'up',
-    color: 'text-amber-500'
-  }
-];
+// Interface for Metrics
+interface HealthMetric {
+  date: string;
+  weight: number;
+  bloodPressure: number;
+  heartRate: number;
+}
 
 const HealthMetrics = () => {
-  const [activeMetric, setActiveMetric] = React.useState('weight');
+  // State management
+  const [data, setData] = useState<HealthMetric[]>([]);
+  const [metrics, setMetrics] = useState([
+    {
+      label: 'Weight',
+      value: '0 kg',
+      change: '0',
+      trend: 'up',
+      color: 'text-gray-500'
+    },
+    {
+      label: 'Blood Pressure',
+      value: '0/0',
+      change: '0',
+      trend: 'up',
+      color: 'text-gray-500'
+    },
+    {
+      label: 'Heart Rate',
+      value: '0 bpm',
+      change: '0',
+      trend: 'up',
+      color: 'text-gray-500'
+    }
+  ]);
+  const [activeMetric, setActiveMetric] = useState('weight');
+
+  // Parse blood pressure string to get systolic value
+  const parseSystolicBP = (bp: string | undefined): number => {
+    if (!bp) return 0;
+    const systolic = bp.split('/')[0];
+    return parseInt(systolic, 10);
+  };
+
+  // Parse heart rate string to get numeric value
+  const parseHeartRate = (hr: string | undefined): number => {
+    if (!hr) return 0;
+    return parseInt(hr.replace('bpm', ''), 10);
+  };
+
+  // Fetch health metrics data
+  useEffect(() => {
+    const fetchHealthMetrics = async () => {
+      try {
+        const token = localStorage.getItem('token');
+        const userId = localStorage.getItem('userId');
+        if (!token || !userId) {
+          throw new Error('Authentication required');
+        }
+
+        const response = await axios.get(`http://localhost:8000/prescriptions/doctor/${userId}`, {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        });
+
+        const prescriptions: Prescription[] = response.data;
+
+        // Transform and filter valid prescription data
+        const healthMetrics: HealthMetric[] = prescriptions
+          .filter(p => p.weight || p.bloodPressure || p.heartRate) // Only include prescriptions with health data
+          .map(p => ({
+            date: new Date(p.date).toLocaleDateString('en-US', { 
+              month: 'short', 
+              day: 'numeric'
+            }),
+            weight: p.weight || 0,
+            bloodPressure: parseSystolicBP(p.bloodPressure),
+            heartRate: parseHeartRate(p.heartRate)
+          }))
+          .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()) // Sort by date
+          .slice(-7); // Take last 7 entries
+
+        if (healthMetrics.length > 0) {
+          setData(healthMetrics);
+
+          // Calculate metrics
+          const latest = healthMetrics[healthMetrics.length - 1];
+          const previous = healthMetrics[healthMetrics.length - 2] || latest;
+
+          const calculateChange = (curr: number, prev: number) => {
+            return ((curr - prev) / prev * 100).toFixed(1);
+          };
+
+          setMetrics([
+            {
+              label: 'Weight',
+              value: `${latest.weight.toFixed(1)} kg`,
+              change: calculateChange(latest.weight, previous.weight),
+              trend: latest.weight >= previous.weight ? 'up' : 'down',
+              color: latest.weight >= previous.weight ? 'text-amber-500' : 'text-green-500'
+            },
+            {
+              label: 'Blood Pressure',
+              value: `${latest.bloodPressure}/80`,
+              change: calculateChange(latest.bloodPressure, previous.bloodPressure),
+              trend: latest.bloodPressure >= previous.bloodPressure ? 'up' : 'down',
+              color: latest.bloodPressure >= previous.bloodPressure ? 'text-amber-500' : 'text-green-500'
+            },
+            {
+              label: 'Heart Rate',
+              value: `${latest.heartRate} bpm`,
+              change: calculateChange(latest.heartRate, previous.heartRate),
+              trend: latest.heartRate >= previous.heartRate ? 'up' : 'down',
+              color: latest.heartRate >= previous.heartRate ? 'text-amber-500' : 'text-green-500'
+            }
+          ]);
+        }
+      } catch (error) {
+        console.error('Error fetching health metrics:', error);
+      }
+    };
+
+    fetchHealthMetrics();
+  }, []);
 
   return (
     <motion.div
@@ -70,7 +169,7 @@ const HealthMetrics = () => {
                 ) : (
                   <ArrowDown className="w-4 h-4" />
                 )}
-                <span className="text-sm">{metric.change}</span>
+                <span className="text-sm">{metric.change}%</span>
               </div>
             </div>
           </div>
@@ -82,7 +181,7 @@ const HealthMetrics = () => {
           <LineChart data={data}>
             <CartesianGrid strokeDasharray="3 3" />
             <XAxis dataKey="date" />
-            <YAxis />
+            <YAxis domain={['auto', 'auto']} />
             <Tooltip />
             <Line
               type="monotone"

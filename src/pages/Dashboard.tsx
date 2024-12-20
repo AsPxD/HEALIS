@@ -105,7 +105,7 @@ const Dashboard = () => {
             <MedicineReminders />
             </div>
             <div className="grid lg:grid-cols-2 gap-8">
-            <HealthMetrics />
+            <HealthMetrics/>
             <DietPlanSummary />
             </div>
           </div>

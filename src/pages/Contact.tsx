@@ -10,6 +10,7 @@ import {
   User 
 } from 'lucide-react';
 import { GoogleGenerativeAI } from "@google/generative-ai";
+import toast from 'react-hot-toast';
 
 // Shared Components
 import PageHeader from '../components/shared/PageHeader';
@@ -62,6 +63,7 @@ const Contact: React.FC = () => {
   const [formData, setFormData] = useState({
     name: '',
     email: '',
+    phoneNumber: '', // Added phone number field
     message: ''
   });
   
@@ -75,6 +77,36 @@ const Contact: React.FC = () => {
   const [userInput, setUserInput] = useState('');
   const [isChatLoading, setIsChatLoading] = useState(false);
 
+  // Validation Function
+  const validateForm = () => {
+    const { name, email, phoneNumber, message } = formData;
+    
+    // Basic validation
+    if (!name.trim()) {
+      toast.error('Name is required');
+      return false;
+    }
+    
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!email.trim() || !emailRegex.test(email)) {
+      toast.error('Please enter a valid email');
+      return false;
+    }
+    
+    const phoneRegex = /^[+]?(\d{10,14})$/;
+    if (!phoneNumber.trim() || !phoneRegex.test(phoneNumber)) {
+      toast.error('Please enter a valid phone number');
+      return false;
+    }
+    
+    if (!message.trim()) {
+      toast.error('Message is required');
+      return false;
+    }
+    
+    return true;
+  };
+
   // Handle form input changes
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
@@ -87,6 +119,10 @@ const Contact: React.FC = () => {
   // Contact Form Submit Handler
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    // Validate form
+    if (!validateForm()) return;
+    
     setIsLoading(true);
     
     try {
@@ -94,19 +130,20 @@ const Contact: React.FC = () => {
       const response = await axios.post('/api/contact', formData);
       
       if (response.data.success) {
-        // Reset form and show success message
+        // Reset form
         setFormData({
           name: '',
           email: '',
+          phoneNumber: '',
           message: ''
         });
         
-        // Optional: Add a toast or alert for successful submission
-        alert('Message sent successfully!');
+        // Show success toast
+        toast.success('Message sent successfully!');
       }
     } catch (error) {
       console.error('Form submission error', error);
-      alert('Failed to send message. Please try again.');
+      toast.error('Failed to send message. Please try again.');
     } finally {
       setIsLoading(false);
     }
@@ -217,7 +254,6 @@ const Contact: React.FC = () => {
                   placeholder="Your name"
                   value={formData.name}
                   onChange={handleInputChange}
-                  required
                   icon={User}
                 />
                 
@@ -228,8 +264,17 @@ const Contact: React.FC = () => {
                   placeholder="you@example.com"
                   value={formData.email}
                   onChange={handleInputChange}
-                  required
                   icon={Mail}
+                />
+
+                <Input
+                  name="phoneNumber"
+                  label="Phone Number"
+                  type="tel"
+                  placeholder="+91 1234567890"
+                  value={formData.phoneNumber}
+                  onChange={handleInputChange}
+                  icon={Phone}
                 />
 
                 <div className="space-y-2">
@@ -243,7 +288,6 @@ const Contact: React.FC = () => {
                     rows={4}
                     className="w-full px-4 py-3 rounded-xl border border-gray-300"
                     placeholder="Your message"
-                    required
                   />
                 </div>
 

@@ -68,7 +68,7 @@ function App() {
               <Route path="/medicine-search" element={<MedicineSearch />} />
               <Route path="/health-insights" element={<HealthInsights />} />
               <Route path="/emergency" element={<EmergencySupport />} />
-
+              
               {/* AI & Technology */}
               <Route path="/ai-chat" element={<AIChatSupport />} />
               <Route path="/ai-diagnostics" element={<AIHealthDiagnostics />} />

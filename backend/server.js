@@ -32,7 +32,7 @@ const Reminder = require('./models/ReminderSchema');
 const Medication = require('./models/MedicationSchema');
 // Add at the top with other requires
 const NutritionistBooking = require('./models/NutritionistBookingSchema');
-
+const Contact = require('./models/ContactSchema')
 // Book Nutritionist Appointment Route
 const PORT = process.env.PORT || 3000
 const app = express()
@@ -288,6 +288,9 @@ app.patch('/appointments/:appointmentId/cancel', async (req, res) => {
 // Add these routes to your server.js file
 
 // Book Lab Tests Route
+// Email template function remains the same as before
+
+// Lab Tests Booking Route with Email Confirmation
 app.post('/lab-tests/book', async (req, res) => {
   try {
     const { 
@@ -323,6 +326,30 @@ app.post('/lab-tests/book', async (req, res) => {
     // Save lab test booking
     await newLabTest.save();
 
+    // Prepare booking data for email template
+    const bookingData = {
+      _id: newLabTest._id,
+      patientName: user.fullName,
+      date: newLabTest.bookingDate,
+      time: newLabTest.bookingTime,
+      tests: tests,
+      totalAmount: totalAmount
+    };
+
+    // Send confirmation email
+    try {
+      await transporter.sendMail({
+        from: '"HEALIS Healthcare" <care.healis@gmail.com>',
+        to: user.email,
+        subject: 'Lab Tests Booking Confirmation',
+        html: createLabTestConfirmationTemplate(bookingData)
+      });
+    } catch (emailError) {
+      console.error('Email sending failed:', emailError);
+      // Don't return error response here, as booking was successful
+      // Just log the error and continue
+    }
+
     res.status(201).json({
       message: 'Lab tests booked successfully',
       labTestId: newLabTest._id
@@ -336,6 +363,8 @@ app.post('/lab-tests/book', async (req, res) => {
     });
   }
 });
+
+// Rest of the API routes (generate-otp and verify-otp) remain the same as before
 
 // Get User's Lab Tests Route
 app.get('/lab-tests/:userId', async (req, res) => {
@@ -395,31 +424,209 @@ app.patch('/lab-tests/:labTestId/cancel', async (req, res) => {
 
 // Add these routes to your server.js file
 
-// Book Vaccination Route
+
+
+// Vaccination Email Confirmation Template
+function createVaccinationConfirmationTemplate(vaccination) {
+  return `
+  <!DOCTYPE html>
+  <html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <style>
+      body {
+        font-family: 'Arial', sans-serif;
+        line-height: 1.6;
+        color: #333;
+        max-width: 600px;
+        margin: 0 auto;
+        padding: 20px;
+        background-color: #f4f4f4;
+      }
+      .container {
+        background-color: white;
+        border-radius: 10px;
+        padding: 30px;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+      }
+      .header {
+        background: linear-gradient(to right, #8A4FFF, #5D3FD3);
+        color: white;
+        text-align: center;
+        padding: 20px;
+        border-radius: 10px 10px 0 0;
+      }
+      .content {
+        padding: 20px;
+      }
+      .vaccination-details {
+        background-color: #f9f9f9;
+        border-radius: 5px;
+        padding: 15px;
+        margin: 20px 0;
+      }
+      .cta-button {
+        display: block;
+        width: 200px;
+        margin: 20px auto;
+        padding: 12px;
+        background: linear-gradient(to right, #8A4FFF, #5D3FD3);
+        color: white;
+        text-align: center;
+        text-decoration: none;
+        border-radius: 5px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <div class="header">
+        <h1>Vaccination Booking Confirmed</h1>
+      </div>
+      <div class="content">
+        <h2>Hello ${vaccination.patient.fullName},</h2>
+        
+        <p>Your vaccination has been successfully booked with HEALIS Healthcare. Here are the details:</p>
+        
+        <div class="vaccination-details">
+          <h3>Vaccination Details</h3>
+          <p><strong>Vaccine:</strong> ${vaccination.vaccine.name}</p>
+          <p><strong>Manufacturer:</strong> ${vaccination.vaccine.manufacturer}</p>
+          <p><strong>Location:</strong> ${vaccination.location}</p>
+          <p><strong>Date:</strong> ${new Date(vaccination.appointmentDate).toLocaleDateString()}</p>
+          <p><strong>Time:</strong> ${vaccination.appointmentTime}</p>
+          <p><strong>Price:</strong> ₹${vaccination.price}</p>
+          <p><strong>Booking ID:</strong> ${vaccination._id}</p>
+        </div>
+        
+        <p>Please arrive 15 minutes before your scheduled time. Bring this confirmation and any necessary identification.</p>
+        
+        <a href="http://localhost:5173/vaccinations" class="cta-button">View Booking</a>
+        
+        <p>If you need to reschedule or have any questions, please contact our support team.</p>
+        
+        <p>Thank you for choosing HEALIS Healthcare. We're committed to your health and well-being.</p>
+        
+        <p>Best regards,<br>The HEALIS Team</p>
+      </div>
+    </div>
+  </body>
+  </html>
+  `;
+}
+
+// Vaccination OTP Generation Route
+app.post('/vaccinations/generate-otp', async (req, res) => {
+  try {
+    const { email, userId } = req.body;
+
+    // Generate 6-digit OTP
+    const otp = crypto.randomInt(100000, 999999).toString();
+
+    // Store OTP with expiration (5 minutes)
+    otpStorage.set(email, {
+      otp,
+      userId,
+      createdAt: Date.now()
+    });
+
+    // Send OTP via email
+    await transporter.sendMail({
+      from: '"HEALIS Healthcare" <care.healis@gmail.com>',
+      to: email,
+      subject: 'OTP for Vaccination Booking',
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 400px; margin: 0 auto;">
+          <h2>Your OTP for Vaccination Booking</h2>
+          <p>Your One-Time Password (OTP) is:</p>
+          <h1 style="letter-spacing: 10px; text-align: center;">${otp}</h1>
+          <p>This OTP will expire in 5 minutes.</p>
+        </div>
+      `
+    });
+
+    res.status(200).json({
+      message: 'OTP sent successfully',
+      success: true
+    });
+
+  } catch (error) {
+    console.error('Vaccination OTP Generation Error:', error);
+    res.status(500).json({
+      message: 'Error generating OTP',
+      success: false
+    });
+  }
+});
+
+// Vaccination OTP Verification Route
+app.post('/vaccinations/verify-otp', async (req, res) => {
+  try {
+    const { email, otp } = req.body;
+
+    const storedOtp = otpStorage.get(email);
+
+    // Check if OTP exists and is valid
+    if (!storedOtp || storedOtp.otp !== otp) {
+      return res.status(400).json({
+        message: 'Invalid OTP',
+        success: false
+      });
+    }
+
+    // Check OTP expiration (5 minutes)
+    const currentTime = Date.now();
+    if (currentTime - storedOtp.createdAt > 5 * 60 * 1000) {
+      otpStorage.delete(email);
+      return res.status(400).json({
+        message: 'OTP has expired',
+        success: false
+      });
+    }
+
+    // Clear OTP after successful verification
+    otpStorage.delete(email);
+
+    res.status(200).json({
+      message: 'OTP verified successfully',
+      success: true,
+      userId: storedOtp.userId
+    });
+
+  } catch (error) {
+    console.error('Vaccination OTP Verification Error:', error);
+    res.status(500).json({
+      message: 'Error verifying OTP',
+      success: false
+    });
+  }
+});
+
+// Vaccination Booking Route
 app.post('/vaccinations/book', async (req, res) => {
   try {
     const { 
       userId, 
       vaccineId, 
       vaccineName, 
+      manufacturer, 
       location, 
       appointmentDate, 
-      appointmentTime,
-      manufacturer,
-      price
+      appointmentTime, 
+      price 
     } = req.body;
 
-    // Fetch user details to automatically include in the vaccination booking
+    // Find user details
     const user = await User.findById(userId);
-    
     if (!user) {
       return res.status(404).json({
-        message: 'User not found'
+        message: 'User not found',
+        success: false
       });
     }
 
-    // Create new vaccination booking
-    const newVaccination = new Vaccination({
+    // Create vaccination booking
+    const vaccination = new Vaccination({
       patient: {
         userId: user._id,
         fullName: user.fullName,
@@ -431,24 +638,32 @@ app.post('/vaccinations/book', async (req, res) => {
         manufacturer: manufacturer
       },
       location,
-      appointmentDate: new Date(appointmentDate),
+      appointmentDate,
       appointmentTime,
       price
     });
 
-    // Save vaccination booking
-    await newVaccination.save();
+    await vaccination.save();
+
+    // Send confirmation email
+    await transporter.sendMail({
+      from: '"HEALIS Healthcare" <care.healis@gmail.com>',
+      to: user.email,
+      subject: 'Vaccination Booking Confirmation',
+      html: createVaccinationConfirmationTemplate(vaccination)
+    });
 
     res.status(201).json({
       message: 'Vaccination booked successfully',
-      vaccinationId: newVaccination._id
+      success: true,
+      booking: vaccination
     });
 
   } catch (error) {
     console.error('Vaccination Booking Error:', error);
     res.status(500).json({
-      message: 'Server error during vaccination booking',
-      error: error.message
+      message: 'Error booking vaccination',
+      success: false
     });
   }
 });
@@ -513,17 +728,14 @@ app.patch('/vaccinations/:vaccinationId/cancel', async (req, res) => {
 // Book Pharmacy Order Route
 app.post('/pharmacy/order', async (req, res) => {
   try {
-    const { 
-      userId, 
-      items,
-      totalAmount
-    } = req.body;
+    const { userId, items, totalAmount } = req.body;
 
-    // Fetch user details to automatically include in the pharmacy order
+    // Fetch user details
     const user = await User.findById(userId);
     
     if (!user) {
       return res.status(404).json({
+        success: false,
         message: 'User not found'
       });
     }
@@ -542,21 +754,32 @@ app.post('/pharmacy/order', async (req, res) => {
         quantity: item.quantity,
         price: item.price
       })),
-      totalAmount
+      totalAmount,
+      status: 'Pending'
     });
 
     // Save pharmacy order
-    await newPharmacyOrder.save();
+    const savedOrder = await newPharmacyOrder.save();
+
+    // Send confirmation email
+    await transporter.sendMail({
+      from: '"HEALIS Pharmacy" <care.healis@gmail.com>',
+      to: user.email,
+      subject: 'Your HEALIS Pharmacy Order Confirmation',
+      html: createPharmacyOrderConfirmationTemplate(savedOrder)
+    });
 
     res.status(201).json({
+      success: true,
       message: 'Pharmacy order placed successfully',
-      orderId: newPharmacyOrder._id
+      orderId: savedOrder._id
     });
 
   } catch (error) {
     console.error('Pharmacy Order Error:', error);
     res.status(500).json({
-      message: 'Server error during pharmacy order',
+      success: false,
+      message: 'Error creating pharmacy order',
       error: error.message
     });
   }
@@ -590,50 +813,82 @@ app.post('/mental-health/book', async (req, res) => {
   try {
     const { 
       userId, 
-      therapistId, 
-      therapistName, 
-      therapistSpecialty, 
+      doctorId,
+      doctorName, 
+      doctorSpecialty, 
       appointmentDate, 
-      appointmentTime 
+      appointmentTime,
+      email 
     } = req.body;
 
-    // Fetch user details to automatically include in the appointment
+    // Fetch user details
     const user = await User.findById(userId);
     
     if (!user) {
       return res.status(404).json({
+        success: false,
         message: 'User not found'
       });
     }
 
-    // Create new mental health appointment
+    // Validate time format (HH:MM)
+    const timeRegex = /^([01]\d|2[0-3]):([0-5]\d)$/;
+    if (!timeRegex.test(appointmentTime)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid time format. Please use HH:MM format'
+      });
+    }
+
+    // Create new mental health appointment matching schema exactly
     const newMentalHealthAppointment = new MentalHealth({
       patient: {
         userId: user._id,
         fullName: user.fullName,
-        email: user.email
+        email: email || user.email
       },
-      therapist: {
-        id: therapistId,
-        name: therapistName,
-        specialty: therapistSpecialty
+      therapist: {  // Match schema exactly
+        id: parseInt(doctorId), // Convert to Number as per schema
+        name: doctorName,
+        specialty: doctorSpecialty
       },
-      appointmentDate,
-      appointmentTime
+      appointmentDate: new Date(appointmentDate),
+      appointmentTime,
+      status: 'Scheduled' // Use exact enum value from schema
     });
 
-    // Save appointment
-    await newMentalHealthAppointment.save();
+    // Validate against schema
+    const validationError = newMentalHealthAppointment.validateSync();
+    if (validationError) {
+      return res.status(400).json({
+        success: false,
+        message: 'Validation failed',
+        error: validationError.message
+      });
+    }
 
-    res.status(201).json({
+    // Save appointment
+    const savedAppointment = await newMentalHealthAppointment.save();
+    
+    // Send email confirmation
+    await transporter.sendMail({
+      from: '"HEALIS Healthcare" <care.healis@gmail.com>',
+      to: email || user.email,
+      subject: 'Mental Health Appointment Confirmed - HEALIS Healthcare',
+      html: createMentalHealthAppointmentTemplate(savedAppointment)
+    });
+
+    return res.status(201).json({
+      success: true,
       message: 'Mental Health Appointment booked successfully',
-      appointmentId: newMentalHealthAppointment._id
+      appointmentId: savedAppointment._id
     });
 
   } catch (error) {
     console.error('Mental Health Appointment Booking Error:', error);
-    res.status(500).json({
-      message: 'Server error during mental health appointment booking',
+    return res.status(500).json({
+      success: false,
+      message: error.name === 'ValidationError' ? error.message : 'Failed to book appointment',
       error: error.message
     });
   }
@@ -1247,6 +1502,18 @@ app.post('/nutritionist/book', async (req, res) => {
     // Save booking
     await newNutritionistBooking.save();
 
+    // Send confirmation email
+    try {
+      await transporter.sendMail({
+        from: '"HEALIS Healthcare" <care.healis@gmail.com>',
+        to: user.email,
+        subject: 'Nutritionist Appointment Confirmation - HEALIS Healthcare',
+        html: createNutritionistConfirmationTemplate(newNutritionistBooking)
+      });
+    } catch (emailError) {
+      console.error('Nutritionist Booking Confirmation Email Error:', emailError);
+    }
+
     res.status(201).json({
       message: 'Nutritionist Booking successful',
       bookingId: newNutritionistBooking._id
@@ -1260,7 +1527,6 @@ app.post('/nutritionist/book', async (req, res) => {
     });
   }
 });
-
 // Get User's Nutritionist Bookings Route
 app.get('/nutritionist/bookings/:userId', async (req, res) => {
   try {
@@ -1765,6 +2031,999 @@ app.post('/health-checkup/verify-otp', async (req, res) => {
     });
   }
 });
+// Email template for lab test booking confirmation
+function createLabTestConfirmationTemplate(labBooking) {
+  return `
+  <!DOCTYPE html>
+  <html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <style>
+      body {
+        font-family: 'Arial', sans-serif;
+        line-height: 1.6;
+        color: #333;
+        max-width: 600px;
+        margin: 0 auto;
+        padding: 20px;
+        background-color: #f4f4f4;
+      }
+      .container {
+        background-color: white;
+        border-radius: 10px;
+        padding: 30px;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+      }
+      .header {
+        background: linear-gradient(to right, #8B5CF6, #6D28D9);
+        color: white;
+        text-align: center;
+        padding: 20px;
+        border-radius: 10px 10px 0 0;
+      }
+      .content {
+        padding: 20px;
+      }
+      .lab-test-details {
+        background-color: #f9f9f9;
+        border-radius: 5px;
+        padding: 15px;
+        margin: 20px 0;
+      }
+      .cta-button {
+        display: block;
+        width: 200px;
+        margin: 20px auto;
+        padding: 12px;
+        background: linear-gradient(to right, #8B5CF6, #6D28D9);
+        color: white;
+        text-align: center;
+        text-decoration: none;
+        border-radius: 5px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <div class="header">
+        <h1>Lab Tests Booking Confirmed</h1>
+      </div>
+      <div class="content">
+        <h2>Hello ${labBooking.patientName},</h2>
+        
+        <p>Your lab tests have been successfully booked with HEALIS Healthcare. Here are your booking details:</p>
+        
+        <div class="lab-test-details">
+          <h3>Booking Details</h3>
+          <p><strong>Appointment Date:</strong> ${new Date(labBooking.date).toLocaleDateString()}</p>
+          <p><strong>Time Slot:</strong> ${labBooking.time}</p>
+          <p><strong>Booking ID:</strong> ${labBooking._id}</p>
+          <p><strong>Total Amount:</strong> ₹${labBooking.totalAmount}</p>
+          
+          <h4>Booked Tests:</h4>
+          <ul>
+            ${labBooking.tests.map(test => `
+              <li>
+                <strong>${test.name}</strong> - ₹${test.price}
+              </li>
+            `).join('')}
+          </ul>
+        </div>
+        
+        <div class="instructions">
+          <h4>Important Instructions:</h4>
+          <ul>
+            <li>Please arrive 15 minutes before your scheduled time</li>
+            <li>Bring a valid photo ID for verification</li>
+            <li>Fasting for 8-12 hours is recommended for most blood tests</li>
+            <li>Bring your booking confirmation</li>
+          </ul>
+        </div>
+        
+        <a href="http://localhost:5173/lab-tests" class="cta-button">View Booking</a>
+        
+        <p>Need to reschedule or have questions? Contact our support team at care.healis@gmail.com</p>
+        
+        <p>Thank you for choosing HEALIS Healthcare for your diagnostic needs.</p>
+        
+        <p>Best regards,<br>The HEALIS Team</p>
+      </div>
+    </div>
+  </body>
+  </html>
+  `;
+}
+
+// Lab Tests OTP Generation Route
+app.post('/lab-tests/generate-otp', async (req, res) => {
+  try {
+    const { email, userId } = req.body;
+
+    if (!email || !userId) {
+      return res.status(400).json({
+        message: 'Email and user ID are required',
+        success: false
+      });
+    }
+
+    // Generate 6-digit OTP
+    const otp = crypto.randomInt(100000, 999999).toString();
+
+    // Store OTP with expiration (5 minutes)
+    otpStorage.set(email, {
+      otp,
+      userId,
+      createdAt: Date.now()
+    });
+
+    // Send OTP via email
+    await transporter.sendMail({
+      from: '"HEALIS Healthcare" <care.healis@gmail.com>',
+      to: email,
+      subject: 'OTP for Lab Tests Booking',
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 400px; margin: 0 auto;">
+          <div style="background: linear-gradient(to right, #8B5CF6, #6D28D9); color: white; padding: 20px; text-align: center; border-radius: 10px 10px 0 0;">
+            <h2 style="margin: 0;">Lab Tests Booking OTP</h2>
+          </div>
+          <div style="background: white; padding: 20px; border-radius: 0 0 10px 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
+            <p>Your One-Time Password (OTP) for lab tests booking is:</p>
+            <h1 style="letter-spacing: 10px; text-align: center; color: #6D28D9;">${otp}</h1>
+            <p style="color: #666; font-size: 14px;">This OTP will expire in 5 minutes.</p>
+            <p style="color: #666; font-size: 14px;">If you didn't request this OTP, please ignore this email.</p>
+          </div>
+        </div>
+      `
+    });
+
+    res.status(200).json({
+      message: 'OTP sent successfully',
+      success: true
+    });
+
+  } catch (error) {
+    console.error('Lab Tests OTP Generation Error:', error);
+    res.status(500).json({
+      message: 'Error generating OTP',
+      success: false
+    });
+  }
+});
+
+// Lab Tests OTP Verification Route
+app.post('/lab-tests/verify-otp', async (req, res) => {
+  try {
+    const { email, otp } = req.body;
+
+    if (!email || !otp) {
+      return res.status(400).json({
+        message: 'Email and OTP are required',
+        success: false
+      });
+    }
+
+    const storedData = otpStorage.get(email);
+
+    // Check if OTP exists and is valid
+    if (!storedData || storedData.otp !== otp) {
+      return res.status(400).json({
+        message: 'Invalid OTP',
+        success: false
+      });
+    }
+
+    // Check OTP expiration (5 minutes)
+    const currentTime = Date.now();
+    if (currentTime - storedData.createdAt > 5 * 60 * 1000) {
+      otpStorage.delete(email);
+      return res.status(400).json({
+        message: 'OTP has expired',
+        success: false
+      });
+    }
+
+    // Clear OTP after successful verification
+    otpStorage.delete(email);
+
+    res.status(200).json({
+      message: 'OTP verified successfully',
+      success: true,
+      userId: storedData.userId
+    });
+
+  } catch (error) {
+    console.error('Lab Tests OTP Verification Error:', error);
+    res.status(500).json({
+      message: 'Error verifying OTP',
+      success: false
+    });
+  }
+});
+function createMentalHealthAppointmentTemplate(appointment) {
+  // Format date to locale string
+  const formattedDate = new Date(appointment.appointmentDate).toLocaleDateString('en-US', {
+    weekday: 'long',
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric'
+  });
+
+  // Format time to 12-hour format
+  const formattedTime = appointment.appointmentTime;
+
+  return `
+  <!DOCTYPE html>
+  <html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <style>
+      body {
+        font-family: 'Arial', sans-serif;
+        line-height: 1.6;
+        color: #333;
+        max-width: 600px;
+        margin: 0 auto;
+        padding: 20px;
+        background-color: #f4f4f4;
+      }
+      .container {
+        background-color: white;
+        border-radius: 10px;
+        padding: 30px;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+      }
+      .header {
+        background: linear-gradient(to right, #8B5CF6, #6D28D9);
+        color: white;
+        text-align: center;
+        padding: 20px;
+        border-radius: 10px 10px 0 0;
+      }
+      .content {
+        padding: 20px;
+      }
+      .appointment-details {
+        background-color: #f9f9f9;
+        border-radius: 5px;
+        padding: 15px;
+        margin: 20px 0;
+      }
+      .cta-button {
+        display: block;
+        width: 200px;
+        margin: 20px auto;
+        padding: 12px;
+        background: linear-gradient(to right, #8B5CF6, #6D28D9);
+        color: white;
+        text-align: center;
+        text-decoration: none;
+        border-radius: 5px;
+      }
+      .doctor-info {
+        display: flex;
+        align-items: center;
+        gap: 15px;
+        margin: 15px 0;
+        padding: 15px;
+        background-color: #f9f9f9;
+        border-radius: 5px;
+      }
+      .doctor-photo {
+        width: 80px;
+        height: 80px;
+        border-radius: 50%;
+        object-fit: cover;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <div class="header">
+        <h1>Mental Health Appointment Confirmed</h1>
+      </div>
+      <div class="content">
+        <h2>Hello ${appointment.patient.fullName},</h2>
+        
+        <p>Your mental health appointment has been successfully scheduled with HEALIS Healthcare.</p>
+        
+        <div class="doctor-info">
+          <img src="/api/placeholder/80/80" alt="Therapist's photo" class="doctor-photo">
+          <div>
+            <h3 style="margin: 0;">${appointment.therapist.name}</h3>
+            <p style="margin: 5px 0; color: #6D28D9;">${appointment.therapist.specialty}</p>
+          </div>
+        </div>
+        
+        <div class="appointment-details">
+          <h3>Appointment Details</h3>
+          <p><strong>Date:</strong> ${formattedDate}</p>
+          <p><strong>Time:</strong> ${formattedTime}</p>
+          <p><strong>Status:</strong> ${appointment.status}</p>
+          <p><strong>Booking ID:</strong> ${appointment._id}</p>
+        </div>
+        
+        <div class="instructions">
+          <h4>Important Instructions:</h4>
+          <ul>
+            <li>Please arrive 10 minutes before your scheduled time</li>
+            <li>Bring any relevant medical records or previous mental health documentation</li>
+            <li>Have a list of current medications ready, if any</li>
+            <li>Ensure you're in a quiet, private space if this is a virtual consultation</li>
+            <li>Feel free to bring a family member or friend for support if you wish</li>
+          </ul>
+        </div>
+        
+        <a href="http://localhost:5173/mental-health" class="cta-button">View Appointment</a>
+        
+        <p>Need to reschedule or have questions? Contact our mental health support team at care.healis@gmail.com</p>
+        
+        <p>We're committed to providing you with compassionate and professional mental health care.</p>
+        
+        <p>Best regards,<br>The HEALIS Healthcare Team</p>
+      </div>
+    </div>
+  </body>
+  </html>
+  `;
+}
+
+// Mental Health Appointment OTP Generation Route
+app.post('/mental-health/generate-otp', async (req, res) => {
+  try {
+    const { email, userId } = req.body;
+
+    if (!email || !userId) {
+      return res.status(400).json({
+        message: 'Email and user ID are required',
+        success: false
+      });
+    }
+
+    // Generate 6-digit OTP
+    const otp = crypto.randomInt(100000, 999999).toString();
+
+    // Store OTP with expiration (5 minutes)
+    otpStorage.set(email, {
+      otp,
+      userId,
+      createdAt: Date.now()
+    });
+
+    // Send OTP via email
+    await transporter.sendMail({
+      from: '"HEALIS Healthcare" <care.healis@gmail.com>',
+      to: email,
+      subject: 'OTP for Mental Health Appointment',
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 400px; margin: 0 auto;">
+          <div style="background: linear-gradient(to right, #8B5CF6, #6D28D9); color: white; padding: 20px; text-align: center; border-radius: 10px 10px 0 0;">
+            <h2 style="margin: 0;">Mental Health Appointment OTP</h2>
+          </div>
+          <div style="background: white; padding: 20px; border-radius: 0 0 10px 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
+            <p>Your One-Time Password (OTP) for mental health appointment booking is:</p>
+            <h1 style="letter-spacing: 10px; text-align: center; color: #6D28D9;">${otp}</h1>
+            <p style="color: #666; font-size: 14px;">This OTP will expire in 5 minutes.</p>
+            <p style="color: #666; font-size: 14px;">If you didn't request this OTP, please ignore this email.</p>
+            <p style="color: #666; font-size: 14px;">Your privacy and security are important to us.</p>
+          </div>
+        </div>
+      `
+    });
+
+    res.status(200).json({
+      message: 'OTP sent successfully',
+      success: true
+    });
+
+  } catch (error) {
+    console.error('Mental Health OTP Generation Error:', error);
+    res.status(500).json({
+      message: 'Error generating OTP',
+      success: false
+    });
+  }
+});
+
+// Mental Health Appointment OTP Verification Route
+app.post('/mental-health/verify-otp', async (req, res) => {
+  try {
+    const { email, otp } = req.body;
+
+    if (!email || !otp) {
+      return res.status(400).json({
+        message: 'Email and OTP are required',
+        success: false
+      });
+    }
+
+    const storedData = otpStorage.get(email);
+
+    // Check if OTP exists and is valid
+    if (!storedData || storedData.otp !== otp) {
+      return res.status(400).json({
+        message: 'Invalid OTP',
+        success: false
+      });
+    }
+
+    // Check OTP expiration (5 minutes)
+    const currentTime = Date.now();
+    if (currentTime - storedData.createdAt > 5 * 60 * 1000) {
+      otpStorage.delete(email);
+      return res.status(400).json({
+        message: 'OTP has expired',
+        success: false
+      });
+    }
+
+    // Clear OTP after successful verification
+    otpStorage.delete(email);
+
+    res.status(200).json({
+      message: 'OTP verified successfully',
+      success: true,
+      userId: storedData.userId
+    });
+
+  } catch (error) {
+    console.error('Mental Health OTP Verification Error:', error);
+    res.status(500).json({
+      message: 'Error verifying OTP',
+      success: false
+    });
+  }
+});
+function createPharmacyOrderConfirmationTemplate(order) {
+  return `
+  <!DOCTYPE html>
+  <html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <style>
+      body {
+        font-family: 'Arial', sans-serif;
+        line-height: 1.6;
+        color: #333;
+        max-width: 600px;
+        margin: 0 auto;
+        padding: 20px;
+        background-color: #f4f4f4;
+      }
+      .container {
+        background-color: white;
+        border-radius: 10px;
+        padding: 30px;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+      }
+      .header {
+        background: linear-gradient(to right, #8B5CF6, #6D28D9);
+        color: white;
+        text-align: center;
+        padding: 20px;
+        border-radius: 10px 10px 0 0;
+      }
+      .content {
+        padding: 20px;
+      }
+      .order-details {
+        background-color: #f9f9f9;
+        border-radius: 5px;
+        padding: 15px;
+        margin: 20px 0;
+      }
+      .medicine-list {
+        margin: 15px 0;
+        border-top: 1px solid #eee;
+        padding-top: 15px;
+      }
+      .medicine-item {
+        display: flex;
+        justify-content: space-between;
+        margin: 8px 0;
+      }
+      .cta-button {
+        display: block;
+        width: 200px;
+        margin: 20px auto;
+        padding: 12px;
+        background: linear-gradient(to right, #8B5CF6, #6D28D9);
+        color: white;
+        text-align: center;
+        text-decoration: none;
+        border-radius: 5px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <div class="header">
+        <h1>Order Confirmation</h1>
+      </div>
+      <div class="content">
+        <h2>Hello,</h2>
+        
+        <p>Your order has been successfully placed with HEALIS Pharmacy. Here are your order details:</p>
+        
+        <div class="order-details">
+          <h3>Order Summary</h3>
+          <p><strong>Order ID:</strong> ${order._id}</p>
+          <p><strong>Order Date:</strong> ${new Date().toLocaleDateString()}</p>
+          <p><strong>Delivery Expected:</strong> Within 2-3 hours</p>
+          
+          <div class="medicine-list">
+            <h4>Ordered Items:</h4>
+            ${order.items.map(item => `
+              <div class="medicine-item">
+                <span>${item.name} x ${item.quantity}</span>
+                <span>₹${item.price * item.quantity}</span>
+              </div>
+            `).join('')}
+            
+            <div class="medicine-item" style="margin-top: 15px; font-weight: bold;">
+              <span>Total Amount</span>
+              <span>₹${order.totalAmount}</span>
+            </div>
+          </div>
+        </div>
+        
+        <p>Your medicines will be delivered to your registered address. Our delivery partner will contact you shortly.</p>
+        
+        <a href="http://localhost:5173/pharmacy" class="cta-button">Track Order</a>
+        
+        <p>If you have any questions about your order, please contact our support team.</p>
+        
+        <p>Thank you for choosing HEALIS Pharmacy. We're committed to your health and well-being.</p>
+        
+        <p>Best regards,<br>The HEALIS Team</p>
+      </div>
+    </div>
+  </body>
+  </html>
+  `;
+}
+
+// Pharmacy OTP Generation Route
+app.post('/pharmacy/generate-otp', async (req, res) => {
+  try {
+    const { email, userId } = req.body;
+
+    if (!email || !userId) {
+      return res.status(400).json({
+        message: 'Email and user ID are required',
+        success: false
+      });
+    }
+
+    // Generate 6-digit OTP
+    const otp = crypto.randomInt(100000, 999999).toString();
+
+    // Store OTP with expiration (5 minutes)
+    otpStorage.set(email, {
+      otp,
+      userId,
+      createdAt: Date.now()
+    });
+
+    // Send OTP via email
+    await transporter.sendMail({
+      from: '"HEALIS Pharmacy" <care.healis@gmail.com>',
+      to: email,
+      subject: 'OTP for Pharmacy Order',
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 400px; margin: 0 auto;">
+          <h2 style="color: #6D28D9;">Your OTP for Pharmacy Order</h2>
+          <p>Please use the following One-Time Password (OTP) to confirm your order:</p>
+          <h1 style="letter-spacing: 10px; text-align: center; color: #6D28D9;">${otp}</h1>
+          <p>This OTP will expire in 5 minutes.</p>
+          <p style="color: #666; font-size: 0.9em;">For security reasons, please do not share this OTP with anyone.</p>
+        </div>
+      `
+    });
+
+    res.status(200).json({
+      message: 'OTP sent successfully',
+      success: true
+    });
+
+  } catch (error) {
+    console.error('Pharmacy OTP Generation Error:', error);
+    res.status(500).json({
+      message: 'Error generating OTP',
+      success: false
+    });
+  }
+});
+
+// Pharmacy OTP Verification Route
+app.post('/pharmacy/verify-otp', async (req, res) => {
+  try {
+    const { email, otp } = req.body;
+
+    const storedData = otpStorage.get(email);
+
+    // Check if OTP exists and is valid
+    if (!storedData || storedData.otp !== otp) {
+      return res.status(400).json({
+        message: 'Invalid OTP',
+        success: false
+      });
+    }
+
+    // Check OTP expiration (5 minutes)
+    const currentTime = Date.now();
+    if (currentTime - storedData.createdAt > 5 * 60 * 1000) {
+      otpStorage.delete(email);
+      return res.status(400).json({
+        message: 'OTP has expired',
+        success: false
+      });
+    }
+
+    // Clear OTP after successful verification
+    otpStorage.delete(email);
+
+    res.status(200).json({
+      message: 'OTP verified successfully',
+      success: true
+    });
+
+  } catch (error) {
+    console.error('Pharmacy OTP Verification Error:', error);
+    res.status(500).json({
+      message: 'Error verifying OTP',
+      success: false
+    });
+  }
+});
+const createNutritionistConfirmationTemplate = (booking) => {
+  return `
+  <!DOCTYPE html>
+  <html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <style>
+      body {
+        font-family: 'Arial', sans-serif;
+        line-height: 1.6;
+        color: #333;
+        max-width: 600px;
+        margin: 0 auto;
+        padding: 20px;
+        background-color: #f4f4f4;
+      }
+      .container {
+        background-color: white;
+        border-radius: 10px;
+        padding: 30px;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+      }
+      .header {
+        background: linear-gradient(to right, #4299E1, #48BB78);
+        color: white;
+        text-align: center;
+        padding: 20px;
+        border-radius: 10px 10px 0 0;
+      }
+      .content {
+        padding: 20px;
+      }
+      .booking-details {
+        background-color: #f9f9f9;
+        border-radius: 5px;
+        padding: 15px;
+        margin: 20px 0;
+      }
+      .cta-button {
+        display: block;
+        width: 200px;
+        margin: 20px auto;
+        padding: 12px;
+        background: linear-gradient(to right, #4299E1, #48BB78);
+        color: white;
+        text-align: center;
+        text-decoration: none;
+        border-radius: 5px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <div class="header">
+        <h1>Nutritionist Appointment Confirmed</h1>
+      </div>
+      <div class="content">
+        <h2>Hello ${booking.patient.fullName},</h2>
+        
+        <p>Your appointment with our nutritionist has been successfully booked. Here are the details:</p>
+        
+        <div class="booking-details">
+          <h3>Appointment Details</h3>
+          <p><strong>Nutritionist:</strong> ${booking.nutritionist.name}</p>
+          <p><strong>Specialization:</strong> ${booking.nutritionist.specialization}</p>
+          <p><strong>Date:</strong> ${new Date(booking.bookingDate).toLocaleDateString()}</p>
+          <p><strong>Time:</strong> ${booking.bookingTime}</p>
+          <p><strong>Total Price:</strong> ₹${booking.totalPrice}</p>
+          <p><strong>Booking ID:</strong> ${booking._id}</p>
+        </div>
+        
+        <p>Please arrive 10 minutes before your scheduled appointment. Don't forget to bring any relevant medical records or diet plans.</p>
+        
+        <a href="http://localhost:5173/bookings" class="cta-button">View Booking</a>
+        
+        <p>Need to reschedule or have questions? Contact our support team for assistance.</p>
+        
+        <p>Thank you for choosing HEALIS Healthcare for your nutritional consultation.</p>
+        
+        <p>Best regards,<br>The HEALIS Team</p>
+      </div>
+    </div>
+  </body>
+  </html>
+  `;
+};
+
+// Nutritionist Booking OTP Generation Route
+app.post('/nutritionist/generate-otp', async (req, res) => {
+  try {
+    const { email } = req.body;
+
+    // Generate 6-digit OTP
+    const otp = crypto.randomInt(100000, 999999).toString();
+
+    // Store OTP with expiration (5 minutes)
+    otpStorage.set(email, {
+      otp,
+      createdAt: Date.now()
+    });
+
+    // Send OTP via email
+    await transporter.sendMail({
+      from: '"HEALIS Healthcare" <care.healis@gmail.com>',
+      to: email,
+      subject: 'OTP for Nutritionist Appointment Booking',
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 400px; margin: 0 auto;">
+          <h2>Your OTP for Nutritionist Appointment</h2>
+          <p>Your One-Time Password (OTP) is:</p>
+          <h1 style="letter-spacing: 10px; text-align: center;">${otp}</h1>
+          <p>This OTP will expire in 5 minutes.</p>
+          <p>Please do not share this OTP with anyone.</p>
+        </div>
+      `
+    });
+
+    res.status(200).json({
+      message: 'OTP sent successfully',
+      success: true
+    });
+
+  } catch (error) {
+    console.error('Nutritionist Booking OTP Generation Error:', error);
+    res.status(500).json({
+      message: 'Error generating OTP',
+      success: false
+    });
+  }
+});
+
+// Nutritionist Booking OTP Verification Route
+app.post('/nutritionist/verify-otp', async (req, res) => {
+  try {
+    const { email, otp } = req.body;
+
+    const storedOtp = otpStorage.get(email);
+
+    // Check if OTP exists and is valid
+    if (!storedOtp || storedOtp.otp !== otp) {
+      return res.status(400).json({
+        message: 'Invalid OTP',
+        success: false
+      });
+    }
+
+    // Check OTP expiration (5 minutes)
+    const currentTime = Date.now();
+    if (currentTime - storedOtp.createdAt > 5 * 60 * 1000) {
+      otpStorage.delete(email);
+      return res.status(400).json({
+        message: 'OTP has expired',
+        success: false
+      });
+    }
+
+    // Clear OTP after successful verification
+    otpStorage.delete(email);
+
+    res.status(200).json({
+      message: 'OTP verified successfully',
+      success: true
+    });
+
+  } catch (error) {
+    console.error('Nutritionist Booking OTP Verification Error:', error);
+    res.status(500).json({
+      message: 'Error verifying OTP',
+      success: false
+    });
+  }
+});
+
+// Vaccination Email Confirmation Template
+function createVaccinationConfirmationTemplate(vaccination) {
+  return `
+  <!DOCTYPE html>
+  <html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <style>
+      body {
+        font-family: 'Arial', sans-serif;
+        line-height: 1.6;
+        color: #333;
+        max-width: 600px;
+        margin: 0 auto;
+        padding: 20px;
+        background-color: #f4f4f4;
+      }
+      .container {
+        background-color: white;
+        border-radius: 10px;
+        padding: 30px;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+      }
+      .header {
+        background: linear-gradient(to right, #8A4FFF, #5D3FD3);
+        color: white;
+        text-align: center;
+        padding: 20px;
+        border-radius: 10px 10px 0 0;
+      }
+      .content {
+        padding: 20px;
+      }
+      .vaccination-details {
+        background-color: #f9f9f9;
+        border-radius: 5px;
+        padding: 15px;
+        margin: 20px 0;
+      }
+      .cta-button {
+        display: block;
+        width: 200px;
+        margin: 20px auto;
+        padding: 12px;
+        background: linear-gradient(to right, #8A4FFF, #5D3FD3);
+        color: white;
+        text-align: center;
+        text-decoration: none;
+        border-radius: 5px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <div class="header">
+        <h1>Vaccination Booking Confirmed</h1>
+      </div>
+      <div class="content">
+        <h2>Hello ${vaccination.patient.fullName},</h2>
+        
+        <p>Your vaccination has been successfully booked with HEALIS Healthcare. Here are the details:</p>
+        
+        <div class="vaccination-details">
+          <h3>Vaccination Details</h3>
+          <p><strong>Vaccine:</strong> ${vaccination.vaccine.name}</p>
+          <p><strong>Manufacturer:</strong> ${vaccination.vaccine.manufacturer}</p>
+          <p><strong>Location:</strong> ${vaccination.location}</p>
+          <p><strong>Date:</strong> ${new Date(vaccination.appointmentDate).toLocaleDateString()}</p>
+          <p><strong>Time:</strong> ${vaccination.appointmentTime}</p>
+          <p><strong>Price:</strong> ₹${vaccination.price}</p>
+          <p><strong>Booking ID:</strong> ${vaccination._id}</p>
+        </div>
+        
+        <p>Please arrive 15 minutes before your scheduled time. Bring this confirmation and any necessary identification.</p>
+        
+        <a href="http://localhost:5173/vaccinations" class="cta-button">View Booking</a>
+        
+        <p>If you need to reschedule or have any questions, please contact our support team.</p>
+        
+        <p>Thank you for choosing HEALIS Healthcare. We're committed to your health and well-being.</p>
+        
+        <p>Best regards,<br>The HEALIS Team</p>
+      </div>
+    </div>
+  </body>
+  </html>
+  `;
+}
+
+// Vaccination OTP Generation Route
+app.post('/vaccinations/generate-otp', async (req, res) => {
+  try {
+    const { email, userId } = req.body;
+
+    // Generate 6-digit OTP
+    const otp = crypto.randomInt(100000, 999999).toString();
+
+    // Store OTP with expiration (5 minutes)
+    otpStorage.set(email, {
+      otp,
+      userId,
+      createdAt: Date.now()
+    });
+
+    // Send OTP via email
+    await transporter.sendMail({
+      from: '"HEALIS Healthcare" <care.healis@gmail.com>',
+      to: email,
+      subject: 'OTP for Vaccination Booking',
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 400px; margin: 0 auto;">
+          <h2>Your OTP for Vaccination Booking</h2>
+          <p>Your One-Time Password (OTP) is:</p>
+          <h1 style="letter-spacing: 10px; text-align: center;">${otp}</h1>
+          <p>This OTP will expire in 5 minutes.</p>
+        </div>
+      `
+    });
+
+    res.status(200).json({
+      message: 'OTP sent successfully',
+      success: true
+    });
+
+  } catch (error) {
+    console.error('Vaccination OTP Generation Error:', error);
+    res.status(500).json({
+      message: 'Error generating OTP',
+      success: false
+    });
+  }
+});
+
+// Vaccination OTP Verification Route
+app.post('/vaccinations/verify-otp', async (req, res) => {
+  try {
+    const { email, otp } = req.body;
+
+    const storedOtp = otpStorage.get(email);
+
+    // Check if OTP exists and is valid
+    if (!storedOtp || storedOtp.otp !== otp) {
+      return res.status(400).json({
+        message: 'Invalid OTP',
+        success: false
+      });
+    }
+
+    // Check OTP expiration (5 minutes)
+    const currentTime = Date.now();
+    if (currentTime - storedOtp.createdAt > 5 * 60 * 1000) {
+      otpStorage.delete(email);
+      return res.status(400).json({
+        message: 'OTP has expired',
+        success: false
+      });
+    }
+
+    // Clear OTP after successful verification
+    otpStorage.delete(email);
+
+    res.status(200).json({
+      message: 'OTP verified successfully',
+      success: true,
+      userId: storedOtp.userId
+    });
+
+  } catch (error) {
+    console.error('Vaccination OTP Verification Error:', error);
+    res.status(500).json({
+      message: 'Error verifying OTP',
+      success: false
+    });
+  }
+});
+
 /*app.get('/api/patient-appointments/:userId', async (req, res) => {
   try {
     const userId = req.params.userId;
@@ -1821,6 +3080,204 @@ app.get('/api/doctor-appointments/:doctorId', async (req, res) => {
     });
   }
 });
+// Contact Email Confirmation Template
+function createContactConfirmationTemplate(contactMessage) {
+  return `
+  <!DOCTYPE html>
+  <html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <style>
+      body {
+        font-family: 'Arial', sans-serif;
+        line-height: 1.6;
+        color: #333;
+        max-width: 600px;
+        margin: 0 auto;
+        padding: 20px;
+        background-color: #f4f4f4;
+      }
+      .container {
+        background-color: white;
+        border-radius: 10px;
+        padding: 30px;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+      }
+      .header {
+        background: linear-gradient(to right, #4CAF50, #45a049);
+        color: white;
+        text-align: center;
+        padding: 20px;
+        border-radius: 10px 10px 0 0;
+      }
+      .content {
+        padding: 20px;
+      }
+      .contact-details {
+        background-color: #f9f9f9;
+        border-radius: 5px;
+        padding: 15px;
+        margin: 20px 0;
+      }
+      .cta-button {
+        display: block;
+        width: 200px;
+        margin: 20px auto;
+        padding: 12px;
+        background: linear-gradient(to right, #4CAF50, #45a049);
+        color: white;
+        text-align: center;
+        text-decoration: none;
+        border-radius: 5px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <div class="header">
+        <h1>Contact Form Submission Received</h1>
+      </div>
+      <div class="content">
+        <h2>Hello ${contactMessage.name},</h2>
+        
+        <p>Thank you for reaching out to HEALIS Healthcare. We have received your message and will get back to you soon.</p>
+        
+        <div class="contact-details">
+          <h3>Submission Details</h3>
+          <p><strong>Name:</strong> ${contactMessage.name}</p>
+          <p><strong>Email:</strong> ${contactMessage.email}</p>
+          <p><strong>Phone:</strong> ${contactMessage.phoneNumber}</p>
+          <p><strong>Message:</strong> ${contactMessage.message}</p>
+          <p><strong>Submission ID:</strong> ${contactMessage._id}</p>
+        </div>
+        
+        <p>Our support team will review your message and respond within 1-2 business days.</p>
+        
+        <a href="http://localhost:5173/contact" class="cta-button">View Submission</a>
+        
+        <p>If you have any urgent concerns, please contact our support hotline.</p>
+        
+        <p>Best regards,<br>The HEALIS Support Team</p>
+      </div>
+    </div>
+  </body>
+  </html>
+  `;
+}
+
+// Contact Form Submission API Route
+// Contact Form Submission API Route
+app.post('/api/contact', async (req, res) => {
+  try {
+    const { name, email, phoneNumber, message } = req.body;
+
+    // Create new contact submission
+    const contactSubmission = new Contact({
+      name,
+      email,
+      phoneNumber,
+      message
+    });
+
+    // Save to database
+    await contactSubmission.save();
+
+    // Send confirmation email to user
+    await transporter.sendMail({
+      from: '"HEALIS Healthcare" <care.healis@gmail.com>',
+      to: email,
+      subject: 'Contact Form Submission Confirmation',
+      html: createContactConfirmationTemplate(contactSubmission)
+    });
+
+    res.status(201).json({
+      message: 'Contact form submitted successfully',
+      success: true,
+      submissionId: contactSubmission._id
+    });
+
+  } catch (error) {
+    console.error('Contact Form Submission Error:', error);
+    
+    // Handle validation errors
+    if (error.name === 'ValidationError') {
+      return res.status(400).json({
+        message: 'Invalid form data',
+        errors: Object.values(error.errors).map(err => err.message),
+        success: false
+      });
+    }
+
+    res.status(500).json({
+      message: 'Error submitting contact form',
+      success: false
+    });
+  }
+});
+
+// Get Contact Submissions (Admin Route)
+/*app.get('/api/contact/submissions', authenticateAdmin, async (req, res) => {
+  try {
+    const { page = 1, limit = 10, status } = req.query;
+
+    const query = status ? { status } : {};
+
+    const options = {
+      page: parseInt(page),
+      limit: parseInt(limit),
+      sort: { createdAt: -1 }
+    };
+
+    const submissions = await Contact.paginate(query, options);
+
+    res.status(200).json({
+      message: 'Contact submissions retrieved',
+      success: true,
+      ...submissions
+    });
+
+  } catch (error) {
+    console.error('Retrieve Contact Submissions Error:', error);
+    res.status(500).json({
+      message: 'Error retrieving contact submissions',
+      success: false
+    });
+  }
+});
+
+// Update Contact Submission Status (Admin Route)
+app.patch('/api/contact/submissions/:id', authenticateAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { status, assignedTo } = req.body;
+
+    const updatedSubmission = await Contact.findByIdAndUpdate(
+      id, 
+      { status, assignedTo }, 
+      { new: true }
+    );
+
+    if (!updatedSubmission) {
+      return res.status(404).json({
+        message: 'Contact submission not found',
+        success: false
+      });
+    }
+
+    res.status(200).json({
+      message: 'Contact submission updated',
+      success: true,
+      submission: updatedSubmission
+    });
+
+  } catch (error) {
+    console.error('Update Contact Submission Error:', error);
+    res.status(500).json({
+      message: 'Error updating contact submission',
+      success: false
+    });
+  }
+});*/
 app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname,'..' , 'index.html'))
 })
