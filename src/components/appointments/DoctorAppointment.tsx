@@ -1,181 +1,203 @@
-import React, { useState } from 'react';
+
+import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { format } from 'date-fns';
-import { MapPin, Star, Clock, Search } from 'lucide-react';
+import { MapPin, Star, Clock, Search, X } from 'lucide-react';
 import Input from '../shared/Input';
 import Button from '../shared/Button';
 import DatePicker from '../shared/DatePicker';
 import { toast } from 'react-toastify';
 import axios from 'axios';
 
-const doctors = [
-  {
-    id: 1,
-    name: "Dr. Priya Sharma",
-    specialty: "Cardiologist",
-    experience: "15 years",
-    rating: 4.9,
-    reviews: 245,
-    location: "Mumbai Central",
-    image: "https://images.unsplash.com/photo-1559839734-2b71ea197ec2?auto=format&fit=crop&q=80&w=300",
-    availability: ["09:00", "10:00", "14:00", "16:00"]
-  },
-  {
-    id: 2,
-    name: "Dr. Rajesh Kumar",
-    specialty: "Neurologist",
-    experience: "12 years",
-    rating: 4.8,
-    reviews: 189,
-    location: "Andheri West",
-    image: "https://images.unsplash.com/photo-1537368910025-700350fe46c7?auto=format&fit=crop&q=80&w=300",
-    availability: ["11:00", "13:00", "15:00", "17:00"]
-  },
-  {
-    id: 3,
-    name: "Dr. Meera Patel",
-    specialty: "Dermatologist",
-    experience: "10 years",
-    rating: 4.7,
-    reviews: 156,
-    location: "Bandra West",
-    image: "https://images.unsplash.com/photo-1594824476967-48c8b964273f?auto=format&fit=crop&q=80&w=300",
-    availability: ["09:30", "11:30", "14:30", "16:30"]
-  }
-];
+// Define interface for Doctor
+interface Doctor {
+  _id: string;
+  name: string;
+  email: string;
+  experience: number;
+  location: string;
+  photo: string;
+  specialty?: string;
+  rating?: number;
+  reviews?: number;
+  availability?: string[];
+}
 
 const DoctorAppointment = () => {
+  const [doctors, setDoctors] = useState<Doctor[]>([]);
   const [selectedDate, setSelectedDate] = useState<Date>();
-  const [selectedDoctor, setSelectedDoctor] = useState<number>();
+  const [selectedDoctor, setSelectedDoctor] = useState<string>();
   const [selectedTime, setSelectedTime] = useState<string>();
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedSpecialty, setSelectedSpecialty] = useState("");
   const [isBooking, setIsBooking] = useState(false);
-  const [otpSent, setOtpSent] = useState(false);
-  const [otp, setOtp] = useState('');
+  
+  // OTP States
+  const [showOTPModal, setShowOTPModal] = useState<boolean>(false);
+  const [email, setEmail] = useState<string>("");
+  const [otp, setOtp] = useState<string>("");
 
+  // Fetch Verified Doctors
+  useEffect(() => {
+    const fetchDoctors = async () => {
+      try {
+        const response = await axios.get('http://localhost:8000/api/verified-doctors');
+        // Enhance doctors with additional fields for UI consistency
+        const enhancedDoctors = response.data.map((doctor: Doctor) => ({
+          ...doctor,
+          rating: 4.5, // Default rating
+          reviews: Math.floor(Math.random() * 300), // Random reviews
+          availability: ['09:00', '10:00', '14:00', '16:00'], // Default availability
+          specialty: doctor.specialty || 'General Practitioner', // Default specialty if not provided
+          image: doctor.photo || 'https://via.placeholder.com/300' // Placeholder if no photo
+        }));
+        setDoctors(enhancedDoctors);
+      } catch (error) {
+        console.error('Error fetching doctors', error);
+        toast.error('Failed to load doctors');
+      }
+    };
+
+    fetchDoctors();
+  }, []);
+
+  // Rest of the code remains the same as in the previous implementation
+  // Filter Doctors
   const filteredDoctors = doctors.filter(doctor => {
-    const matchesSearch = doctor.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      doctor.location.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesSearch = 
+      doctor.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (doctor.location && doctor.location.toLowerCase().includes(searchTerm.toLowerCase()));
     const matchesSpecialty = !selectedSpecialty || doctor.specialty === selectedSpecialty;
     return matchesSearch && matchesSpecialty;
   });
 
-  const handleBookAppointment = async () => {
+  // Generate OTP Handler
+  const handleGenerateOTP = async () => {
     // Validation checks
     if (!selectedDate || !selectedDoctor || !selectedTime) {
       toast.error('Please complete all appointment details');
       return;
     }
 
-    // Get user ID from local storage
+    if (!email) {
+      toast.error('Please enter your email');
+      return;
+    }
+
     const userId = localStorage.getItem('userId');
     if (!userId) {
       toast.error('Please log in to book an appointment');
       return;
     }
 
-    // Find selected doctor details
-    const doctor = doctors.find(d => d.id === selectedDoctor);
-    if (!doctor) {
-      toast.error('Invalid doctor selection');
-      return;
-    }
-
-    setIsBooking(true);
-
     try {
-      const response = await axios.post('/appointments/book', {
-        userId,
-        doctorId: doctor.id,
-        doctorName: doctor.name,
-        doctorSpecialty: doctor.specialty,
-        appointmentDate: selectedDate.toISOString(),
-        appointmentTime: selectedTime
-      });
-
-      toast.success('Appointment booked successfully!');
-
-      // Reset form
-      setSelectedDate(undefined);
-      setSelectedDoctor(undefined);
-      setSelectedTime(undefined);
-      setOtpSent(false);
-      setOtp('');
-
-    } catch (error) {
-      console.error('Booking error', error);
-      toast.error('Failed to book appointment. Please try again.');
-    } finally {
-      setIsBooking(false);
-    }
-  };
-
-  const handleSendOTP = async () => {
-    // Validation checks
-    if (!selectedDate || !selectedDoctor || !selectedTime) {
-      toast.error('Please complete all appointment details');
-      return;
-    }
-
-    // Get user ID from local storage
-    const userId = localStorage.getItem('userId');
-    if (!userId) {
-      toast.error('Please log in to book an appointment');
-      return;
-    }
-
-    // Find selected doctor details
-    const doctor = doctors.find(d => d.id === selectedDoctor);
-    if (!doctor) {
-      toast.error('Invalid doctor selection');
-      return;
-    }
-
-    try {
-      // Fetch user email
-      const userResponse = await axios.get(`/auth/${userId}`);
-      
-      // Send OTP
-      const otpResponse = await axios.post('/appointments/generate-otp', {
-        email: userResponse.data.email
-      });
-
-      if (otpResponse.data.success) {
-        setOtpSent(true);
+      const response = await axios.post('/appointments/generate-otp', { email, userId });
+      if (response.data.success) {
+        setShowOTPModal(true);
         toast.success('OTP sent to your email');
       }
     } catch (error) {
-      console.error('OTP Sending Error', error);
-      toast.error('Failed to send OTP. Please try again.');
+      console.error('OTP Generation Error', error);
+      toast.error('Failed to generate OTP');
     }
   };
 
-  const handleVerifyOTP = async () => {
-    try {
-      // Fetch user email
-      const userId = localStorage.getItem('userId');
-      const userResponse = await axios.get(`/auth/${userId}`);
+  // OTP Verification Handle
 
-      // Verify OTP
-      const verifyResponse = await axios.post('/appointments/verify-otp', {
-        email: userResponse.data.email,
-        otp
-      });
+// OTP Verification Handler
+const handleVerifyOTP = async () => {
+  if (!otp) {
+    toast.error('Please enter OTP');
+    return;
+  }
 
-      if (verifyResponse.data.success) {
-        // Proceed with booking
-        await handleBookAppointment();
-        setOtpSent(false);
-      }
-    } catch (error) {
-      console.error('OTP Verification Error', error);
-      toast.error('Invalid or expired OTP');
+  try {
+    const response = await axios.post('/appointments/verify-otp', { email, otp });
+    
+    if (response.data.success) {
+      // If OTP is verified successfully, proceed with booking
+      await handleBookAppointment();
+      
+      // Close the OTP modal
+      setShowOTPModal(false);
+      
+      // Reset OTP state
+      setOtp('');
     }
-  };
+  } catch (error) {
+    console.error('OTP Verification Error', error);
+    
+    // More specific error handling
+    if (error.response) {
+      toast.error(error.response.data.message || 'Invalid or expired OTP');
+    } else {
+      toast.error('Error verifying OTP. Please try again.');
+    }
+  }
+};
 
+// Book Appointment Handler
+const handleBookAppointment = async () => {
+  // Validation checks
+  if (!selectedDate || !selectedDoctor || !selectedTime) {
+    toast.error('Please complete all appointment details');
+    return;
+  }
+
+  // Get user ID from local storage
+  const userId = localStorage.getItem('userId');
+  if (!userId) {
+    toast.error('Please log in to book an appointment');
+    return;
+  }
+
+  // Find selected doctor details
+  const doctor = doctors.find(d => d._id === selectedDoctor);
+  if (!doctor) {
+    toast.error('Invalid doctor selection');
+    return;
+  }
+
+  setIsBooking(true);
+
+  try {
+    const response = await axios.post('/appointments/book', {
+      userId,
+      doctorId: doctor._id,
+      doctorName: doctor.name,
+      doctorSpecialty: doctor.specialty,
+      appointmentDate: selectedDate.toISOString(),
+      appointmentTime: selectedTime,
+      email
+    });
+
+    toast.success('Appointment booked successfully!');
+
+    // Reset form
+    setSelectedDate(undefined);
+    setSelectedDoctor(undefined);
+    setSelectedTime(undefined);
+    setEmail('');
+    setOtp('');
+
+    // Optional: You might want to trigger a refresh of appointments or navigate to a confirmation page
+  } catch (error) {
+    console.error('Booking error', error);
+    
+    // More specific error handling
+    if (error.response) {
+      toast.error(error.response.data.message || 'Failed to book appointment');
+    } else {
+      toast.error('Failed to book appointment. Please try again.');
+    }
+  } finally {
+    setIsBooking(false);
+  }
+};
   return (
-    <div className="grid lg:grid-cols-3 gap-8">
+    <div className="grid lg:grid-cols-3 gap-8 relative">
+      {/* Existing code remains the same */}
+      {/* Just replace doctors with filteredDoctors in the mapping */}
       <div className="lg:col-span-2 space-y-6">
         <div className="grid md:grid-cols-2 gap-4">
           <Input
@@ -203,16 +225,17 @@ const DoctorAppointment = () => {
         <div className="space-y-4">
           {filteredDoctors.map((doctor) => (
             <motion.div
-              key={doctor.id}
+              key={doctor._id}
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               className={`p-6 rounded-2xl transition-all duration-300 cursor-pointer
-                ${selectedDoctor === doctor.id
+                ${selectedDoctor === doctor._id
                   ? 'bg-violet-50 border-2 border-violet-500'
                   : 'bg-white/80 border border-gray-200 hover:border-violet-200'
                 }`}
-              onClick={() => setSelectedDoctor(doctor.id)}
+              onClick={() => setSelectedDoctor(doctor._id)}
             >
+              {/* Existing doctor card layout */}
               <div className="flex items-start gap-6">
                 <div className="w-24 h-24 flex-shrink-0">
                   <img
@@ -237,7 +260,7 @@ const DoctorAppointment = () => {
                   <div className="mt-2 flex items-center gap-6 text-gray-600">
                     <div className="flex items-center gap-2">
                       <Clock className="w-5 h-5 flex-shrink-0" />
-                      <span>{doctor.experience}</span>
+                      <span>{doctor.experience} years</span>
                     </div>
                     <div className="flex items-center gap-2">
                       <MapPin className="w-5 h-5 flex-shrink-0" />
@@ -245,7 +268,7 @@ const DoctorAppointment = () => {
                     </div>
                   </div>
 
-                  {selectedDoctor === doctor.id && (
+                  {selectedDoctor === doctor._id && (
                     <motion.div
                       initial={{ opacity: 0, height: 0 }}
                       animate={{ opacity: 1, height: 'auto' }}
@@ -253,7 +276,7 @@ const DoctorAppointment = () => {
                     >
                       <p className="font-medium text-gray-900 mb-2">Available Slots</p>
                       <div className="flex flex-wrap gap-2">
-                        {doctor.availability.map((time) => (
+                        {doctor.availability?.map((time) => (
                           <button
                             key={time}
                             onClick={() => setSelectedTime(time)}
@@ -275,6 +298,7 @@ const DoctorAppointment = () => {
           ))}
         </div>
       </div>
+
 
       <div className="space-y-6">
         <div className="bg-white/80 backdrop-blur-sm rounded-2xl p-6 border border-gray-200">
@@ -303,33 +327,54 @@ const DoctorAppointment = () => {
               </div>
             </div>
             
-            {!otpSent ? (
+            <div className="mt-4">
+              <Input
+                label="Email for Confirmation"
+                type="email"
+                placeholder="Enter your email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+              />
               <Button 
-                className="w-full mt-6" 
-                onClick={handleSendOTP}
+                className="w-full mt-4" 
+                onClick={handleGenerateOTP}
+                disabled={!email}
               >
-                Send OTP to Confirm Booking
+                Proceed to Book
               </Button>
-            ) : (
-              <div className="space-y-4">
-                <Input 
-                  label="Enter OTP" 
-                  type="text" 
-                  value={otp} 
-                  onChange={(e) => setOtp(e.target.value)} 
-                  placeholder="Enter 6-digit OTP" 
-                />
-                <Button 
-                  className="w-full" 
-                  onClick={handleVerifyOTP}
-                >
-                  Verify OTP and Book
-                </Button>
-              </div>
-            )}
+            </div>
           </motion.div>
         )}
       </div>
+
+      {/* OTP Verification Modal */}
+      {showOTPModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white p-8 rounded-lg w-96 relative">
+            <button 
+              onClick={() => setShowOTPModal(false)} 
+              className="absolute top-4 right-4"
+            >
+              <X className="w-6 h-6 text-gray-500" />
+            </button>
+            <h2 className="text-2xl font-bold mb-4">Verify OTP</h2>
+            <Input
+              label="Enter OTP"
+              type="text"
+              value={otp}
+              onChange={(e) => setOtp(e.target.value)}
+              placeholder="6-digit OTP"
+            />
+            <Button 
+              className="w-full mt-4" 
+              onClick={handleVerifyOTP}
+              isLoading={isBooking}
+            >
+              Verify OTP
+            </Button>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

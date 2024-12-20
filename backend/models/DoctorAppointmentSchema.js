@@ -20,7 +20,7 @@ const DoctorAppointmentSchema = new mongoose.Schema({
   },
   doctor: {
     id: {
-      type: Number,
+      type: mongoose.Schema.Types.ObjectId,
       required: true
     },
     name: {

@@ -1,11 +1,31 @@
-import React from 'react';
+import React, { useState } from 'react';
+import axios from 'axios';
 import { motion } from 'framer-motion';
-import { Phone, Mail, MapPin, Send, MessageSquare, User } from 'lucide-react';
+import { 
+  Phone, 
+  Mail, 
+  MapPin, 
+  Send, 
+  MessageSquare, 
+  User 
+} from 'lucide-react';
+import { GoogleGenerativeAI } from "@google/generative-ai";
+
+// Shared Components
 import PageHeader from '../components/shared/PageHeader';
 import Card from '../components/shared/Card';
 import Input from '../components/shared/Input';
 import Button from '../components/shared/Button';
 
+// Gemini AI Configuration
+const genAI = new GoogleGenerativeAI(
+  process.env.NEXT_PUBLIC_GEMINI_API_KEY || 'AIzaSyCVJvX_GXA2N2qXjL8OFFsvafvSHOJadPY'
+);
+const model = genAI.getGenerativeModel({ 
+  model: "gemini-1.5-flash-8b" 
+});
+
+// Contact Methods Configuration
 const contactMethods = [
   {
     icon: Phone,
@@ -30,17 +50,107 @@ const contactMethods = [
   }
 ];
 
-const Contact = () => {
-  const [isLoading, setIsLoading] = React.useState(false);
-  const [message, setMessage] = React.useState('');
+// Chat Message Type
+type ChatMessage = {
+  text: string;
+  sender: 'user' | 'support';
+};
 
+const Contact: React.FC = () => {
+  // Form States
+  const [isLoading, setIsLoading] = useState(false);
+  const [formData, setFormData] = useState({
+    name: '',
+    email: '',
+    message: ''
+  });
+  
+  // Chat States
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([
+    { 
+      text: "Hi! How can we help you today?", 
+      sender: 'support' 
+    }
+  ]);
+  const [userInput, setUserInput] = useState('');
+  const [isChatLoading, setIsChatLoading] = useState(false);
+
+  // Handle form input changes
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+    const { name, value } = e.target;
+    setFormData(prev => ({
+      ...prev,
+      [name]: value
+    }));
+  };
+
+  // Contact Form Submit Handler
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
-    // Simulate API call
-    await new Promise(resolve => setTimeout(resolve, 1500));
-    setIsLoading(false);
-    setMessage('');
+    
+    try {
+      // Send form data to backend
+      const response = await axios.post('/api/contact', formData);
+      
+      if (response.data.success) {
+        // Reset form and show success message
+        setFormData({
+          name: '',
+          email: '',
+          message: ''
+        });
+        
+        // Optional: Add a toast or alert for successful submission
+        alert('Message sent successfully!');
+      }
+    } catch (error) {
+      console.error('Form submission error', error);
+      alert('Failed to send message. Please try again.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // AI Chat Submit Handler
+  const handleChatSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    // Validate input
+    if (!userInput.trim()) return;
+
+    // Prepare chat messages
+    const newChatMessages: ChatMessage[] = [
+      ...chatMessages, 
+      { text: userInput, sender: 'user' }
+    ];
+    
+    setChatMessages(newChatMessages);
+    setUserInput('');
+    setIsChatLoading(true);
+
+    try {
+      // Generate AI response
+      const result = await model.generateContent(userInput);
+      const aiResponse = result.response.text();
+
+      // Update chat with AI response
+      setChatMessages(prev => [
+        ...prev, 
+        { text: aiResponse, sender: 'support' }
+      ]);
+    } catch (error) {
+      console.error('AI response generation error:', error);
+      setChatMessages(prev => [
+        ...prev, 
+        { 
+          text: "Sorry, I'm experiencing some difficulties. Please try again.", 
+          sender: 'support' 
+        }
+      ]);
+    } finally {
+      setIsChatLoading(false);
+    }
   };
 
   return (
@@ -51,12 +161,14 @@ const Contact = () => {
       className="pt-24 pb-16"
     >
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        {/* Page Header */}
         <PageHeader
           title="Get in Touch"
           subtitle="We're here to help and answer any questions you might have"
           gradient="from-emerald-500 to-teal-500"
         />
 
+        {/* Contact Methods Grid */}
         <div className="grid lg:grid-cols-3 gap-8 mb-16">
           {contactMethods.map((method, index) => (
             <motion.div
@@ -73,8 +185,12 @@ const Contact = () => {
                     <method.icon className="w-6 h-6" />
                   </div>
                   <div>
-                    <h3 className="text-xl font-semibold text-gray-900 mb-2">{method.title}</h3>
-                    <p className="text-gray-900 font-medium mb-1">{method.details}</p>
+                    <h3 className="text-xl font-semibold text-gray-900 mb-2">
+                      {method.title}
+                    </h3>
+                    <p className="text-gray-900 font-medium mb-1">
+                      {method.details}
+                    </p>
                     <p className="text-gray-600">{method.subtitle}</p>
                   </div>
                 </div>
@@ -83,7 +199,9 @@ const Contact = () => {
           ))}
         </div>
 
+        {/* Contact Form and Chat Section */}
         <div className="grid md:grid-cols-2 gap-8 items-start">
+          {/* Contact Form */}
           <motion.div
             initial={{ x: -50, opacity: 0 }}
             whileInView={{ x: 0, opacity: 1 }}
@@ -93,17 +211,23 @@ const Contact = () => {
             <Card>
               <form onSubmit={handleSubmit} className="space-y-6">
                 <Input
+                  name="name"
                   label="Name"
                   type="text"
                   placeholder="Your name"
+                  value={formData.name}
+                  onChange={handleInputChange}
                   required
                   icon={User}
                 />
                 
                 <Input
+                  name="email"
                   label="Email"
                   type="email"
                   placeholder="you@example.com"
+                  value={formData.email}
+                  onChange={handleInputChange}
                   required
                   icon={Mail}
                 />
@@ -113,12 +237,11 @@ const Contact = () => {
                     Message
                   </label>
                   <textarea
-                    value={message}
-                    onChange={(e) => setMessage(e.target.value)}
+                    name="message"
+                    value={formData.message}
+                    onChange={handleInputChange}
                     rows={4}
-                    className="w-full px-4 py-3 rounded-xl border border-gray-300 bg-white/50 
-                      backdrop-blur-sm focus:ring-2 focus:ring-emerald-500 focus:border-transparent 
-                      transition-all duration-300"
+                    className="w-full px-4 py-3 rounded-xl border border-gray-300"
                     placeholder="Your message"
                     required
                   />
@@ -136,6 +259,7 @@ const Contact = () => {
             </Card>
           </motion.div>
 
+          {/* AI Chat Section */}
           <motion.div
             initial={{ x: 50, opacity: 0 }}
             whileInView={{ x: 0, opacity: 1 }}
@@ -148,36 +272,64 @@ const Contact = () => {
                   <MessageSquare className="w-6 h-6 text-emerald-600" />
                 </div>
                 <div>
-                  <h2 className="text-2xl font-bold text-gray-900">Live Chat</h2>
-                  <p className="text-gray-600">Connect with our support team</p>
+                  <h2 className="text-2xl font-bold text-gray-900">
+                    AI Support Chat
+                  </h2>
+                  <p className="text-gray-600">
+                    Connect with our AI assistant
+                  </p>
                 </div>
               </div>
 
-              <div className="space-y-4 mb-6">
-                <div className="flex space-x-4">
-                  <div className="w-8 h-8 rounded-full bg-emerald-100 flex-shrink-0" />
-                  <div className="flex-1">
-                    <div className="bg-gray-100 rounded-2xl p-4">
-                      <p className="text-gray-600">Hi! How can we help you today?</p>
+              <div className="space-y-4 mb-6 max-h-64 overflow-y-auto">
+                {chatMessages.map((msg, index) => (
+                  <div 
+                    key={index} 
+                    className={`flex space-x-4 ${
+                      msg.sender === 'user' ? 'justify-end' : ''
+                    }`}
+                  >
+                    {msg.sender === 'support' && (
+                      <div className="w-8 h-8 rounded-full bg-emerald-100 flex-shrink-0" />
+                    )}
+                    <div className="flex-1 max-w-[80%]">
+                      <div 
+                        className={`rounded-2xl p-4 ${
+                          msg.sender === 'user' 
+                            ? 'bg-emerald-100 text-emerald-900' 
+                            : 'bg-gray-100 text-gray-900'
+                        }`}
+                      >
+                        <p>{msg.text}</p>
+                      </div>
                     </div>
-                    <span className="text-sm text-gray-500 mt-1 block">Support Team, 2m ago</span>
                   </div>
-                </div>
+                ))}
+                {isChatLoading && (
+                  <div className="text-center text-gray-500">
+                    Generating response...
+                  </div>
+                )}
               </div>
 
-              <div className="relative">
+              <form onSubmit={handleChatSubmit} className="relative">
                 <input
                   type="text"
+                  value={userInput}
+                  onChange={(e) => setUserInput(e.target.value)}
                   placeholder="Type your message..."
-                  className="w-full px-4 py-3 pr-12 rounded-xl border border-gray-300 bg-white/50 
-                    backdrop-blur-sm focus:ring-2 focus:ring-emerald-500 focus:border-transparent 
-                    transition-all duration-300"
+                  className="w-full px-4 py-3 pr-12 rounded-xl border border-gray-300"
+                  disabled={isChatLoading}
                 />
-                <button className="absolute right-3 top-1/2 -translate-y-1/2 text-emerald-500
-                  hover:text-emerald-600 transition-colors">
+                <button 
+                  type="submit" 
+                  disabled={isChatLoading}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-emerald-500
+                    hover:text-emerald-600 transition-colors"
+                >
                   <Send className="w-5 h-5" />
                 </button>
-              </div>
+              </form>
             </Card>
           </motion.div>
         </div>

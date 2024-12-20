@@ -1,13 +1,14 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { motion } from 'framer-motion';
-import { Search, Calendar, MapPin, Shield, Clock } from 'lucide-react';
+import { format } from 'date-fns';
+import { Search, Calendar, MapPin, Shield, Clock, X } from 'lucide-react';
 import Input from '../shared/Input';
 import Button from '../shared/Button';
 import DatePicker from '../shared/DatePicker';
-import { format } from 'date-fns';
 import { toast } from 'react-toastify';
 import axios from 'axios';
 
+// Vaccines Data
 const vaccines = [
   {
     id: 1,
@@ -56,29 +57,76 @@ const vaccines = [
   }
 ];
 
-const Vaccinations = () => {
-  const [searchTerm, setSearchTerm] = React.useState("");
-  const [selectedVaccine, setSelectedVaccine] = React.useState<number | null>(null);
-  const [selectedLocation, setSelectedLocation] = React.useState("");
-  const [selectedDate, setSelectedDate] = React.useState<Date>();
-  const [selectedTime, setSelectedTime] = React.useState<string>();
-  const [isBooking, setIsBooking] = React.useState(false);
+const Vaccinations: React.FC = () => {
+  // State Management
+  const [searchTerm, setSearchTerm] = useState<string>("");
+  const [selectedVaccine, setSelectedVaccine] = useState<number | null>(null);
+  const [selectedLocation, setSelectedLocation] = useState<string>("");
+  const [selectedDate, setSelectedDate] = useState<Date | undefined>();
+  const [selectedTime, setSelectedTime] = useState<string | undefined>();
+  const [isBooking, setIsBooking] = useState<boolean>(false);
 
-  const handleBookVaccination = async () => {
+  // OTP States
+  const [showOTPModal, setShowOTPModal] = useState<boolean>(false);
+  const [email, setEmail] = useState<string>("");
+  const [otp, setOtp] = useState<string>("");
+
+  // Generate OTP Handler
+  const handleGenerateOTP = async () => {
     // Validation checks
     if (!selectedDate || !selectedVaccine || !selectedLocation || !selectedTime) {
       toast.error('Please complete all vaccination details');
       return;
     }
 
-    // Get user ID from local storage
+    if (!email) {
+      toast.error('Please enter your email');
+      return;
+    }
+     const userId = localStorage.getItem('userId');
+      if (!userId) {
+        toast.error('Please log in to book lab tests');
+        return;
+      }
+    try {
+      const response = await axios.post('/vaccinations/generate-otp', { email,userId });
+      if (response.data.success) {
+        setShowOTPModal(true);
+        toast.success('OTP sent to your email');
+      }
+    } catch (error) {
+      console.error('OTP Generation Error', error);
+      toast.error('Failed to generate OTP');
+    }
+  };
+
+  // OTP Verification Handler
+  const handleVerifyOTP = async () => {
+    if (!otp) {
+      toast.error('Please enter OTP');
+      return;
+    }
+
+    try {
+      const response = await axios.post('/vaccinations/verify-otp', { email, otp });
+      if (response.data.success) {
+        await handleBookVaccination();
+        setShowOTPModal(false);
+      }
+    } catch (error) {
+      console.error('OTP Verification Error', error);
+      toast.error('Invalid or expired OTP');
+    }
+  };
+
+  // Book Vaccination Handler
+  const handleBookVaccination = async () => {
     const userId = localStorage.getItem('userId');
     if (!userId) {
       toast.error('Please log in to book a vaccination');
       return;
     }
 
-    // Find selected vaccine details
     const vaccine = vaccines.find(v => v.id === selectedVaccine);
     if (!vaccine) {
       toast.error('Invalid vaccine selection');
@@ -94,7 +142,7 @@ const Vaccinations = () => {
         vaccineName: vaccine.name,
         manufacturer: vaccine.manufacturer,
         location: selectedLocation,
-        appointmentDate: selectedDate.toISOString(),
+        appointmentDate: selectedDate?.toISOString(),
         appointmentTime: selectedTime,
         price: vaccine.price
       });
@@ -106,6 +154,8 @@ const Vaccinations = () => {
       setSelectedVaccine(null);
       setSelectedLocation("");
       setSelectedTime(undefined);
+      setEmail("");
+      setOtp("");
 
     } catch (error) {
       console.error('Booking error', error);
@@ -115,10 +165,11 @@ const Vaccinations = () => {
     }
   };
 
-
   return (
-    <div className="grid lg:grid-cols-3 gap-8">
+    <div className="grid lg:grid-cols-3 gap-8 relative">
+      {/* Vaccines List */}
       <div className="lg:col-span-2 space-y-6">
+        {/* Search Input */}
         <Input
           label=""
           type="text"
@@ -128,6 +179,7 @@ const Vaccinations = () => {
           icon={Search}
         />
 
+        {/* Vaccines Grid */}
         <div className="space-y-4">
           {vaccines
             .filter(vaccine => 
@@ -166,6 +218,7 @@ const Vaccinations = () => {
                       </div>
                     </div>
 
+                    {/* Location Selection */}
                     {selectedVaccine === vaccine.id && (
                       <motion.div
                         initial={{ opacity: 0, height: 0 }}
@@ -189,6 +242,7 @@ const Vaccinations = () => {
                           ))}
                         </div>
 
+                        {/* Time Slots */}
                         {selectedLocation && (
                           <motion.div
                             initial={{ opacity: 0, height: 0 }}
@@ -197,7 +251,7 @@ const Vaccinations = () => {
                           >
                             <p className="font-medium text-gray-900 mb-2">Available Slots</p>
                             <div className="flex flex-wrap gap-2">
-                              {vaccine.availability[selectedLocation].map((time) => (
+                              {vaccine.availability[selectedLocation].map(time => (
                                 <button
                                   key={time}
                                   onClick={() => setSelectedTime(time)}
@@ -226,8 +280,10 @@ const Vaccinations = () => {
         </div>
       </div>
 
+      {/* Booking Sidebar */}
       {selectedVaccine && selectedLocation && (
         <div className="space-y-6">
+          {/* Date Picker */}
           <div className="bg-white/80 backdrop-blur-sm rounded-2xl p-6 border border-gray-200">
             <DatePicker
               selected={selectedDate}
@@ -236,6 +292,7 @@ const Vaccinations = () => {
             />
           </div>
 
+          {/* Booking Summary */}
           {selectedVaccine && selectedLocation && selectedDate && selectedTime && (
             <motion.div
               initial={{ opacity: 0, y: 20 }}
@@ -243,33 +300,55 @@ const Vaccinations = () => {
               className="bg-white/80 backdrop-blur-sm rounded-2xl p-6 border border-gray-200"
             >
               <h3 className="text-xl font-semibold text-gray-900 mb-4">Vaccination Details</h3>
-              <div className="space-y-3 text-gray-600">
-                <div className="flex items-center gap-2">
-                  <Shield className="w-5 h-5" />
-                  <span>{vaccines.find(v => v.id === selectedVaccine)?.name}</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <MapPin className="w-5 h-5" />
-                  <span>{selectedLocation}</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Calendar className="w-5 h-5" />
-                  <span>{format(selectedDate, 'PPP')}</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Clock className="w-5 h-5" />
-                  <span>{selectedTime}</span>
-                </div>
+              
+              {/* Email Input and Proceed Button */}
+              <div className="mt-4">
+                <Input
+                  label="Email for Confirmation"
+                  type="email"
+                  placeholder="Enter your email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                />
+                <Button 
+                  className="w-full mt-4" 
+                  onClick={handleGenerateOTP}
+                  disabled={!email}
+                >
+                  Confirm Vaccination
+                </Button>
               </div>
-              <Button
-                className="w-full mt-6"
-                onClick={handleBookVaccination}
-                isLoading={isBooking}
-              >
-                Confirm Vaccination
-              </Button>
             </motion.div>
           )}
+        </div>
+      )}
+
+      {/* OTP Verification Modal */}
+      {showOTPModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white p-8 rounded-lg w-96 relative">
+            <button 
+              onClick={() => setShowOTPModal(false)} 
+              className="absolute top-4 right-4"
+            >
+              <X className="w-6 h-6 text-gray-500" />
+            </button>
+            <h2 className="text-2xl font-bold mb-4">Verify OTP</h2>
+            <Input
+              label="Enter OTP"
+              type="text"
+              value={otp}
+              onChange={(e) => setOtp(e.target.value)}
+              placeholder="6-digit OTP"
+            />
+            <Button 
+              className="w-full mt-4" 
+              onClick={handleVerifyOTP}
+              isLoading={isBooking}
+            >
+              Verify OTP
+            </Button>
+          </div>
         </div>
       )}
     </div>

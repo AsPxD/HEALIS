@@ -1,7 +1,6 @@
 import React from 'react';
 import { motion } from 'framer-motion';
 import { Calendar, User, ArrowRight, Heart, MessageCircle, Share2, BookmarkPlus } from 'lucide-react';
-import Button from '../shared/Button';
 
 interface NewsCardProps {
   article: {
@@ -16,25 +15,33 @@ interface NewsCardProps {
     comments: number;
     readTime: string;
     tags: string[];
+    url?: string;
   };
 }
 
 const NewsCard = ({ article }: NewsCardProps) => {
+  const handleCardClick = () => {
+    if (article.url) {
+      window.open(article.url, '_blank');
+    }
+  };
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
       whileInView={{ opacity: 1, y: 0 }}
       viewport={{ once: true }}
+      onClick={handleCardClick}
       className="bg-white/80 backdrop-blur-lg rounded-2xl overflow-hidden shadow-xl 
         border border-white/20 group hover:shadow-2xl transition-all duration-500
-        hover:border-blue-500/20"
+        hover:border-blue-500/20 cursor-pointer"
     >
       <div className="relative">
         <div className="relative h-48 overflow-hidden">
           <motion.img
             whileHover={{ scale: 1.05 }}
             transition={{ duration: 0.4 }}
-            src={article.image}
+            src={article.image || 'https://imgs.search.brave.com/q5xxb7mkNIHnLu_JGT_qIzjhAYAWPh6tEoGxRW1jsKU/rs:fit:500:0:0:0/g:ce/aHR0cHM6Ly90aHVt/YnMuZHJlYW1zdGlt/ZS5jb20vYi9iZXV0/aWZ1bC1wb3NpdGl2/ZS1pbm5vdmF0aXZl/LW1vb2QtbGFuZHNj/YXBlLTMyNTEwNDA5/Ny5qcGc'}
             alt={article.title}
             className="w-full h-full object-cover"
           />
@@ -45,16 +52,6 @@ const NewsCard = ({ article }: NewsCardProps) => {
             rounded-full text-sm font-medium text-blue-600">
             {article.category}
           </div>
-          
-          {/* Bookmark Button */}
-          <motion.button
-            whileHover={{ scale: 1.1 }}
-            whileTap={{ scale: 0.9 }}
-            className="absolute top-4 right-4 w-8 h-8 rounded-full bg-white/90 backdrop-blur-sm
-              flex items-center justify-center text-gray-600 hover:text-blue-600 transition-colors"
-          >
-            <BookmarkPlus size={18} />
-          </motion.button>
         </div>
       </div>
 
@@ -75,52 +72,20 @@ const NewsCard = ({ article }: NewsCardProps) => {
         
         <p className="text-gray-600 mb-4 line-clamp-2">{article.excerpt}</p>
 
-        <div className="flex flex-wrap gap-2 mb-4">
-          {article.tags.map((tag, index) => (
-            <span
-              key={index}
-              className="px-2 py-1 text-xs rounded-full bg-gray-100 text-gray-600"
-            >
-              {tag}
-            </span>
-          ))}
-        </div>
-
         <div className="flex items-center justify-between pt-4 border-t border-gray-100">
           <div className="flex items-center">
-            <img
-              src={`https://i.pravatar.cc/32?u=${article.author}`}
-              alt={article.author}
-              className="w-8 h-8 rounded-full mr-2"
-            />
+            <User className="h-5 w-5 mr-2 text-gray-500" />
             <span className="text-sm text-gray-600">{article.author}</span>
           </div>
 
-          <div className="flex items-center gap-4">
-            <motion.button
-              whileHover={{ scale: 1.1 }}
-              whileTap={{ scale: 0.9 }}
-              className="flex items-center gap-1 text-rose-500 hover:text-rose-600"
-            >
-              <Heart className="h-4 w-4" />
-              <span className="text-sm">{article.likes}</span>
-            </motion.button>
-            <motion.button
-              whileHover={{ scale: 1.1 }}
-              whileTap={{ scale: 0.9 }}
-              className="flex items-center gap-1 text-blue-500 hover:text-blue-600"
-            >
-              <MessageCircle className="h-4 w-4" />
-              <span className="text-sm">{article.comments}</span>
-            </motion.button>
-            <motion.button
-              whileHover={{ scale: 1.1 }}
-              whileTap={{ scale: 0.9 }}
-              className="flex items-center gap-1 text-green-500 hover:text-green-600"
-            >
-              <Share2 className="h-4 w-4" />
-            </motion.button>
-          </div>
+          <motion.button
+            whileHover={{ scale: 1.1 }}
+            whileTap={{ scale: 0.9 }}
+            className="flex items-center gap-2 text-blue-500 hover:text-blue-600"
+          >
+            <ArrowRight className="h-5 w-5" />
+            <span className="text-sm">Read More</span>
+          </motion.button>
         </div>
       </div>
     </motion.div>

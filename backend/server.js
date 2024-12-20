@@ -1765,6 +1765,62 @@ app.post('/health-checkup/verify-otp', async (req, res) => {
     });
   }
 });
+/*app.get('/api/patient-appointments/:userId', async (req, res) => {
+  try {
+    const userId = req.params.userId;
+
+    // Find all appointments for the user
+    const appointments = await DoctorAppointment.find({ 'patient.userId': userId })
+      .sort({ appointmentDate: -1 }); // Sort by most recent first
+
+    res.status(200).json({
+      appointments
+    });
+  } catch (error) {
+    console.error('Fetch Patient Appointments Error:', error);
+    res.status(500).json({
+      message: 'Server error fetching patient appointments',
+      error: error.message
+    });
+  }
+});*/
+// Add this route to server.js for doctor-specific appointments
+app.get('/api/doctor-appointments/:doctorId', async (req, res) => {
+  try {
+    const doctorId = req.params.doctorId;
+
+    // Validate doctorId
+    if (!doctorId) {
+      return res.status(400).json({
+        message: 'Doctor ID is required',
+        success: false
+      });
+    }
+
+    // Find all appointments for the specific doctor
+    const appointments = await DoctorAppointment.find({ 'doctor.id': doctorId })
+      .sort({ appointmentDate: -1 }); // Sort by most recent first
+
+    // Check if any appointments exist
+    if (!appointments || appointments.length === 0) {
+      return res.status(404).json({
+        message: 'No appointments found for this doctor',
+        appointments: []
+      });
+    }
+
+    res.status(200).json({
+      appointments
+    });
+  } catch (error) {
+    console.error('Fetch Doctor Appointments Error:', error);
+    res.status(500).json({
+      message: 'Server error fetching doctor appointments',
+      error: error.message,
+      success: false
+    });
+  }
+});
 app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname,'..' , 'index.html'))
 })

@@ -1,12 +1,14 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { motion } from 'framer-motion';
 import { format } from 'date-fns';
-import { Search, Star, Clock, MapPin } from 'lucide-react';
+import { Search, Star, Clock, MapPin, X } from 'lucide-react';
 import Input from '../shared/Input';
 import Button from '../shared/Button';
 import DatePicker from '../shared/DatePicker';
-import axios from 'axios';
 import { toast } from 'react-toastify';
+import axios from 'axios';
+
+// Therapists Data
 const therapists = [
   {
     id: 1,
@@ -43,33 +45,82 @@ const therapists = [
   }
 ];
 
-const MentalHealth = () => {
-  const [searchTerm, setSearchTerm] = React.useState("");
-  const [selectedTherapist, setSelectedTherapist] = React.useState<number | null>(null);
-  const [selectedDate, setSelectedDate] = React.useState<Date>();
-  const [selectedTime, setSelectedTime] = React.useState<string>();
-  const [isBooking, setIsBooking] = React.useState(false);
+const MentalHealth: React.FC = () => {
+  // State Management
+  const [searchTerm, setSearchTerm] = useState<string>("");
+  const [selectedTherapist, setSelectedTherapist] = useState<number | null>(null);
+  const [selectedDate, setSelectedDate] = useState<Date | undefined>();
+  const [selectedTime, setSelectedTime] = useState<string | undefined>();
+  const [isBooking, setIsBooking] = useState<boolean>(false);
 
+  // OTP States
+  const [showOTPModal, setShowOTPModal] = useState<boolean>(false);
+  const [email, setEmail] = useState<string>("");
+  const [otp, setOtp] = useState<string>("");
+
+  // Filtered Therapists
   const filteredTherapists = therapists.filter(therapist =>
     therapist.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
     therapist.specialty.toLowerCase().includes(searchTerm.toLowerCase()) ||
     therapist.location.toLowerCase().includes(searchTerm.toLowerCase())
   );
-  const handleBookAppointment = async () => {
+
+  // Generate OTP Handler
+  const handleGenerateOTP = async () => {
     // Validation checks
     if (!selectedDate || !selectedTherapist || !selectedTime) {
       toast.error('Please complete all appointment details');
       return;
     }
 
-    // Get user ID from local storage
+    if (!email) {
+      toast.error('Please enter your email');
+      return;
+    }
+     const userId = localStorage.getItem('userId');
+      if (!userId) {
+        toast.error('Please log in to book lab tests');
+        return;
+      }
+    try {
+      const response = await axios.post('/mental-health/generate-otp', { email,userId });
+      if (response.data.success) {
+        setShowOTPModal(true);
+        toast.success('OTP sent to your email');
+      }
+    } catch (error) {
+      console.error('OTP Generation Error', error);
+      toast.error('Failed to generate OTP');
+    }
+  };
+
+  // OTP Verification Handler
+  const handleVerifyOTP = async () => {
+    if (!otp) {
+      toast.error('Please enter OTP');
+      return;
+    }
+
+    try {
+      const response = await axios.post('/mental-health/verify-otp', { email, otp });
+      if (response.data.success) {
+        await handleBookAppointment();
+        setShowOTPModal(false);
+      }
+    } catch (error) {
+      console.error('OTP Verification Error', error);
+      toast.error('Invalid or expired OTP');
+    }
+  };
+
+  // Book Appointment Handler
+  const handleBookAppointment = async () => {
     const userId = localStorage.getItem('userId');
     if (!userId) {
       toast.error('Please log in to book an appointment');
       return;
     }
 
-    // Find selected therapist details
     const therapist = therapists.find(t => t.id === selectedTherapist);
     if (!therapist) {
       toast.error('Invalid therapist selection');
@@ -84,7 +135,7 @@ const MentalHealth = () => {
         therapistId: therapist.id,
         therapistName: therapist.name,
         therapistSpecialty: therapist.specialty,
-        appointmentDate: selectedDate.toISOString(),
+        appointmentDate: selectedDate?.toISOString(),
         appointmentTime: selectedTime
       });
 
@@ -94,6 +145,8 @@ const MentalHealth = () => {
       setSelectedDate(undefined);
       setSelectedTherapist(null);
       setSelectedTime(undefined);
+      setEmail("");
+      setOtp("");
 
     } catch (error) {
       console.error('Booking error', error);
@@ -104,8 +157,10 @@ const MentalHealth = () => {
   };
 
   return (
-    <div className="grid lg:grid-cols-3 gap-8">
+    <div className="grid lg:grid-cols-3 gap-8 relative">
+      {/* Therapists List */}
       <div className="lg:col-span-2 space-y-6">
+        {/* Search Input */}
         <Input
           label=""
           type="text"
@@ -115,6 +170,7 @@ const MentalHealth = () => {
           icon={Search}
         />
 
+        {/* Therapists Grid */}
         <div className="space-y-4">
           {filteredTherapists.map(therapist => (
             <motion.div
@@ -128,6 +184,7 @@ const MentalHealth = () => {
                 }`}
               onClick={() => setSelectedTherapist(therapist.id)}
             >
+              {/* Therapist Details */}
               <div className="flex items-start gap-4">
                 <img
                   src={therapist.image}
@@ -158,6 +215,7 @@ const MentalHealth = () => {
                     </div>
                   </div>
 
+                  {/* Available Slots */}
                   {selectedTherapist === therapist.id && (
                     <motion.div
                       initial={{ opacity: 0, height: 0 }}
@@ -189,7 +247,9 @@ const MentalHealth = () => {
         </div>
       </div>
 
+      {/* Booking Sidebar */}
       <div className="space-y-6">
+        {/* Date Picker */}
         <div className="bg-white/80 backdrop-blur-sm rounded-2xl p-6 border border-gray-200">
           <DatePicker
             selected={selectedDate}
@@ -198,33 +258,74 @@ const MentalHealth = () => {
           />
         </div>
 
+        {/* Appointment Summary */}
         {selectedTherapist && selectedDate && selectedTime && (
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="bg-white/80 backdrop-blur-sm rounded-2xl p-6 border border-gray-200"
-      >
-        <h3 className="text-xl font-semibold text-gray-900 mb-4">Appointment Summary</h3>
-        <div className="space-y-3 text-gray-600">
-          <div className="flex items-center gap-2">
-            <Clock className="w-5 h-5" />
-            <span>{format(selectedDate, 'PPP')}</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <Clock className="w-5 h-5" />
-            <span>{selectedTime}</span>
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="bg-white/80 backdrop-blur-sm rounded-2xl p-6 border border-gray-200"
+          >
+            <h3 className="text-xl font-semibold text-gray-900 mb-4">Appointment Summary</h3>
+            <div className="space-y-3 text-gray-600">
+              <div className="flex items-center gap-2">
+                <Clock className="w-5 h-5" />
+                <span>{selectedDate ? format(selectedDate, 'PPP') : 'Select Date'}</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <Clock className="w-5 h-5" />
+                <span>{selectedTime || 'Select Time'}</span>
+              </div>
+            </div>
+
+            {/* Email Input and Book Button */}
+            <div className="mt-4">
+              <Input
+                label="Email for Confirmation"
+                type="email"
+                placeholder="Enter your email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+              />
+              <Button 
+                className="w-full mt-4" 
+                onClick={handleGenerateOTP}
+                disabled={!email}
+              >
+                Proceed to Book
+              </Button>
+            </div>
+          </motion.div>
+        )}
+      </div>
+
+      {/* OTP Verification Modal */}
+      {showOTPModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white p-8 rounded-lg w-96 relative">
+            <button 
+              onClick={() => setShowOTPModal(false)} 
+              className="absolute top-4 right-4"
+            >
+              <X className="w-6 h-6 text-gray-500" />
+            </button>
+            <h2 className="text-2xl font-bold mb-4">Verify OTP</h2>
+            <Input
+              label="Enter OTP"
+              type="text"
+              value={otp}
+              onChange={(e) => setOtp(e.target.value)}
+              placeholder="6-digit OTP"
+            />
+            <Button 
+              className="w-full mt-4" 
+              onClick={handleVerifyOTP}
+              isLoading={isBooking}
+            >
+              Verify OTP
+            </Button>
           </div>
         </div>
-        <Button 
-          className="w-full mt-6"
-          onClick={handleBookAppointment}
-          isLoading={isBooking}
-        >
-          Confirm Booking
-        </Button>
-      </motion.div>
-    )}
-      </div>
+      )}
     </div>
   );
 };

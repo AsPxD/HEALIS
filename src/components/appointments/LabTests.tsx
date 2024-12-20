@@ -1,12 +1,14 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { motion } from 'framer-motion';
 import { format } from 'date-fns';
-import { Search, Clock, Star, Calendar } from 'lucide-react';
+import { Search, Clock, Star, Calendar, X } from 'lucide-react';
 import Input from '../shared/Input';
 import Button from '../shared/Button';
 import DatePicker from '../shared/DatePicker';
 import { toast } from 'react-toastify';
 import axios from 'axios';
+
+// Lab Tests Data
 const labTests = [
   {
     id: 1,
@@ -40,13 +42,20 @@ const labTests = [
   }
 ];
 
-const LabTests = () => {
-  const [searchTerm, setSearchTerm] = React.useState("");
-  const [selectedTests, setSelectedTests] = React.useState<number[]>([]);
-  const [selectedDate, setSelectedDate] = React.useState<Date>();
-  const [selectedTime, setSelectedTime] = React.useState<string>();
-  const [isBooking, setIsBooking] = React.useState(false);
+const LabTests: React.FC = () => {
+  // State Management
+  const [searchTerm, setSearchTerm] = useState<string>("");
+  const [selectedTests, setSelectedTests] = useState<number[]>([]);
+  const [selectedDate, setSelectedDate] = useState<Date | undefined>();
+  const [selectedTime, setSelectedTime] = useState<string | undefined>();
+  const [isBooking, setIsBooking] = useState<boolean>(false);
 
+  // OTP States
+  const [showOTPModal, setShowOTPModal] = useState<boolean>(false);
+  const [email, setEmail] = useState<string>("");
+  const [otp, setOtp] = useState<string>("");
+
+  // Test Selection Handler
   const handleTestSelection = (testId: number) => {
     setSelectedTests(prev => 
       prev.includes(testId)
@@ -55,19 +64,62 @@ const LabTests = () => {
     );
   };
 
+  // Calculate Total Amount
   const totalAmount = selectedTests.reduce((sum, testId) => {
     const test = labTests.find(t => t.id === testId);
     return sum + (test?.price || 0);
   }, 0);
 
-  const handleBookLabTest = async () => {
+  // Generate OTP Handler
+  const handleGenerateOTP = async () => {
     // Validation checks
     if (!selectedDate || !selectedTime || selectedTests.length === 0) {
       toast.error('Please complete all booking details');
       return;
     }
 
-    // Get user ID from local storage
+    if (!email) {
+      toast.error('Please enter your email');
+      return;
+    }
+    const userId = localStorage.getItem('userId');
+  if (!userId) {
+    toast.error('Please log in to book lab tests');
+    return;
+  }
+    try {
+      const response = await axios.post('/lab-tests/generate-otp', { email,userId });
+      if (response.data.success) {
+        setShowOTPModal(true);
+        toast.success('OTP sent to your email');
+      }
+    } catch (error) {
+      console.error('OTP Generation Error', error);
+      toast.error('Failed to generate OTP');
+    }
+  };
+
+  // OTP Verification Handler
+  const handleVerifyOTP = async () => {
+    if (!otp) {
+      toast.error('Please enter OTP');
+      return;
+    }
+
+    try {
+      const response = await axios.post('/lab-tests/verify-otp', { email, otp });
+      if (response.data.success) {
+        await handleBookLabTest();
+        setShowOTPModal(false);
+      }
+    } catch (error) {
+      console.error('OTP Verification Error', error);
+      toast.error('Invalid or expired OTP');
+    }
+  };
+
+  // Book Lab Test Handler
+  const handleBookLabTest = async () => {
     const userId = localStorage.getItem('userId');
     if (!userId) {
       toast.error('Please log in to book lab tests');
@@ -86,11 +138,10 @@ const LabTests = () => {
         };
       });
 
-      // Actual API call to book lab tests
       const response = await axios.post('/lab-tests/book', {
         userId,
         tests: selectedTestDetails,
-        date: selectedDate.toISOString(),
+        date: selectedDate?.toISOString(),
         time: selectedTime,
         totalAmount
       });
@@ -101,6 +152,8 @@ const LabTests = () => {
       setSelectedTests([]);
       setSelectedDate(undefined);
       setSelectedTime(undefined);
+      setEmail("");
+      setOtp("");
 
     } catch (error) {
       console.error('Booking error', error);
@@ -110,10 +163,11 @@ const LabTests = () => {
     }
   };
 
-
   return (
-    <div className="grid lg:grid-cols-3 gap-8">
+    <div className="grid lg:grid-cols-3 gap-8 relative">
+      {/* Main Content */}
       <div className="lg:col-span-2 space-y-6">
+        {/* Search Input */}
         <Input
           label=""
           type="text"
@@ -123,6 +177,7 @@ const LabTests = () => {
           icon={Search}
         />
 
+        {/* Lab Tests List */}
         <div className="space-y-4">
           {labTests
             .filter(test => 
@@ -140,6 +195,7 @@ const LabTests = () => {
                     : 'bg-white/80 border border-gray-200 hover:border-violet-200'
                   }`}
               >
+                {/* Test Details */}
                 <div className="flex justify-between items-start">
                   <div className="flex-1">
                     <h3 className="text-xl font-semibold text-gray-900 mb-2">{test.name}</h3>
@@ -174,7 +230,9 @@ const LabTests = () => {
         </div>
       </div>
 
+      {/* Booking Sidebar */}
       <div className="space-y-6">
+        {/* Date Picker */}
         <div className="bg-white/80 backdrop-blur-sm rounded-2xl p-6 border border-gray-200">
           <DatePicker
             selected={selectedDate}
@@ -183,16 +241,17 @@ const LabTests = () => {
           />
         </div>
 
+        {/* Time Slots and Booking Summary */}
         {selectedTests.length > 0 && selectedDate && (
           <motion.div
             initial={{ opacity: 0, x: 20 }}
             animate={{ opacity: 1, x: 0 }}
             className="space-y-6"
           >
+            {/* Time Slot Selection */}
             <div className="bg-white/80 backdrop-blur-sm rounded-2xl p-6 border border-gray-200">
               <h3 className="text-xl font-semibold text-gray-900 mb-4">Select Time Slot</h3>
               <div className="flex flex-wrap gap-2">
-                {/* Use the first test's available slots if multiple tests are selected */}
                 {labTests.find(test => selectedTests.includes(test.id))?.availableSlots.map(time => (
                   <button
                     key={time}
@@ -209,6 +268,7 @@ const LabTests = () => {
               </div>
             </div>
 
+            {/* Booking Summary */}
             <div className="bg-white/80 backdrop-blur-sm rounded-2xl p-6 border border-gray-200">
               <h3 className="text-xl font-semibold text-gray-900 mb-4">Booking Summary</h3>
               <div className="space-y-3">
@@ -236,17 +296,57 @@ const LabTests = () => {
                   </div>
                 </div>
               </div>
-              <Button 
-                className="w-full mt-6" 
-                onClick={handleBookLabTest}
-                isLoading={isBooking}
-              >
-                Book Lab Tests
-              </Button>
+              
+              {/* Book Lab Test Button with Email Input */}
+              <div className="mt-4">
+                <Input
+                  label="Email for Confirmation"
+                  type="email"
+                  placeholder="Enter your email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                />
+                <Button 
+                  className="w-full mt-4" 
+                  onClick={handleGenerateOTP}
+                  disabled={!email}
+                >
+                  Proceed to Book
+                </Button>
+              </div>
             </div>
           </motion.div>
         )}
       </div>
+
+      {/* OTP Verification Modal */}
+      {showOTPModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white p-8 rounded-lg w-96 relative">
+            <button 
+              onClick={() => setShowOTPModal(false)} 
+              className="absolute top-4 right-4"
+            >
+              <X className="w-6 h-6 text-gray-500" />
+            </button>
+            <h2 className="text-2xl font-bold mb-4">Verify OTP</h2>
+            <Input
+              label="Enter OTP"
+              type="text"
+              value={otp}
+              onChange={(e) => setOtp(e.target.value)}
+              placeholder="6-digit OTP"
+            />
+            <Button 
+              className="w-full mt-4" 
+              onClick={handleVerifyOTP}
+              isLoading={isBooking}
+            >
+              Verify OTP
+            </Button>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

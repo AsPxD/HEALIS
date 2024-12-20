@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { motion } from 'framer-motion';
-import { Search, Clock, MapPin, Activity } from 'lucide-react';
+import { Search, Clock, MapPin, Activity, X } from 'lucide-react';
 import Input from '../shared/Input';
 import Button from '../shared/Button';
 import axios from 'axios';
@@ -70,7 +70,10 @@ const HealthCheckup: React.FC = () => {
   const [selectedPackage, setSelectedPackage] = useState<number | null>(null);
   const [selectedLocation, setSelectedLocation] = useState<string>("");
   const [isBooking, setIsBooking] = useState<boolean>(false);
-  const [otpSent, setOtpSent] = useState<boolean>(false);
+  
+  // OTP States
+  const [showOTPModal, setShowOTPModal] = useState<boolean>(false);
+  const [email, setEmail] = useState<string>("");
   const [otp, setOtp] = useState<string>("");
 
   // Filtered Packages
@@ -79,11 +82,16 @@ const HealthCheckup: React.FC = () => {
     pkg.description.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  // Send OTP for Booking Verification
-  const handleSendOTP = async () => {
+  // Generate OTP Handler
+  const handleGenerateOTP = async () => {
     // Validation checks
     if (!selectedPackage || !selectedLocation) {
       toast.error('Please select a package and location');
+      return;
+    }
+
+    if (!email) {
+      toast.error('Please enter your email');
       return;
     }
 
@@ -94,36 +102,29 @@ const HealthCheckup: React.FC = () => {
     }
 
     try {
-      const userResponse = await axios.get(`/auth/${userId}`);
-      
-      const otpResponse = await axios.post('/health-checkup/generate-otp', {
-        email: userResponse.data.email
-      });
-
-      if (otpResponse.data.success) {
-        setOtpSent(true);
+      const response = await axios.post('/health-checkup/generate-otp', { email, userId });
+      if (response.data.success) {
+        setShowOTPModal(true);
         toast.success('OTP sent to your email');
       }
     } catch (error) {
-      console.error('OTP Sending Error', error);
-      toast.error('Failed to send OTP. Please try again.');
+      console.error('OTP Generation Error', error);
+      toast.error('Failed to generate OTP');
     }
   };
 
-  // Verify OTP and Complete Booking
+  // OTP Verification Handler
   const handleVerifyOTP = async () => {
+    if (!otp) {
+      toast.error('Please enter OTP');
+      return;
+    }
+
     try {
-      const userId = localStorage.getItem('userId');
-      const userResponse = await axios.get(`/auth/${userId}`);
-
-      const verifyResponse = await axios.post('/health-checkup/verify-otp', {
-        email: userResponse.data.email,
-        otp
-      });
-
-      if (verifyResponse.data.success) {
+      const response = await axios.post('/health-checkup/verify-otp', { email, otp });
+      if (response.data.success) {
         await handleBookHealthCheckup();
-        setOtpSent(false);
+        setShowOTPModal(false);
       }
     } catch (error) {
       console.error('OTP Verification Error', error);
@@ -161,7 +162,8 @@ const HealthCheckup: React.FC = () => {
         location: selectedLocation,
         tests: pkg.tests,
         bookingDate: new Date().toISOString(),
-        totalPrice: pkg.price
+        totalPrice: pkg.price,
+        email
       });
 
       toast.success('Health Checkup booked successfully!');
@@ -169,8 +171,8 @@ const HealthCheckup: React.FC = () => {
       // Reset form
       setSelectedPackage(null);
       setSelectedLocation("");
-      setOtpSent(false);
-      setOtp('');
+      setEmail("");
+      setOtp("");
 
     } catch (error) {
       console.error('Booking error', error);
@@ -300,34 +302,54 @@ const HealthCheckup: React.FC = () => {
               </div>
             </div>
 
-            {/* OTP Verification Flow */}
-            {!otpSent ? (
-              <Button
-                className="w-full mt-6"
-                onClick={handleSendOTP}
+            {/* Email Input and Booking */}
+            <div className="mt-4">
+              <Input
+                label="Email for Confirmation"
+                type="email"
+                placeholder="Enter your email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+              />
+              <Button 
+                className="w-full mt-4" 
+                onClick={handleGenerateOTP}
+                disabled={!email}
               >
-                Send OTP to Confirm Booking
+                Proceed to Book
               </Button>
-            ) : (
-              <div className="space-y-4">
-                <Input 
-                  label="Enter OTP" 
-                  type="text" 
-                  value={otp} 
-                  onChange={(e) => setOtp(e.target.value)} 
-                  placeholder="Enter 6-digit OTP" 
-                />
-                <Button 
-                  className="w-full" 
-                  onClick={handleVerifyOTP}
-                  isLoading={isBooking}
-                >
-                  Verify OTP and Book
-                </Button>
-              </div>
-            )}
+            </div>
           </div>
         </motion.div>
+      )}
+
+      {/* OTP Verification Modal */}
+      {showOTPModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white p-8 rounded-lg w-96 relative">
+            <button 
+              onClick={() => setShowOTPModal(false)} 
+              className="absolute top-4 right-4"
+            >
+              <X className="w-6 h-6 text-gray-500" />
+            </button>
+            <h2 className="text-2xl font-bold mb-4">Verify OTP</h2>
+            <Input
+              label="Enter OTP"
+              type="text"
+              value={otp}
+              onChange={(e) => setOtp(e.target.value)}
+              placeholder="6-digit OTP"
+            />
+            <Button 
+              className="w-full mt-4" 
+              onClick={handleVerifyOTP}
+              isLoading={isBooking}
+            >
+              Verify OTP
+            </Button>
+          </div>
+        </div>
       )}
     </div>
   );
