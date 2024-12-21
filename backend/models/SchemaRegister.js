@@ -1,6 +1,13 @@
 const mongoose = require('mongoose');
-const bcrypt = require('bcryptjs')
+const bcrypt = require('bcryptjs');
+
 const RegisterSchema = new mongoose.Schema({
+  patientId: {
+    type: String,
+    required: true,
+    unique: true,
+    trim: true
+  },
   fullName: {
     type: String,
     required: true,
@@ -45,7 +52,7 @@ const RegisterSchema = new mongoose.Schema({
   timestamps: true
 });
 
-// Optional: Password hashing middleware
+// Password hashing middleware
 RegisterSchema.pre('save', async function(next) {
   if (!this.isModified('password')) return next();
   
@@ -58,9 +65,44 @@ RegisterSchema.pre('save', async function(next) {
   }
 });
 
-// Optional: Method to compare password
+// Password comparison method
 RegisterSchema.methods.comparePassword = async function(candidatePassword) {
   return bcrypt.compare(candidatePassword, this.password);
 };
 
-module.exports = mongoose.model('User', RegisterSchema);
+// Create and export the model
+const User = mongoose.model('User', RegisterSchema);
+
+// Generate patient ID function
+async function generatePatientId() {
+  const prefix = 'PT';
+  const currentYear = new Date().getFullYear().toString().slice(-2);
+  
+  try {
+    // Find the highest existing patient ID for the current year
+    const latestPatient = await User.findOne({
+      patientId: new RegExp(`^${prefix}${currentYear}`)
+    }, { patientId: 1 })
+      .sort({ patientId: -1 });
+    
+    let sequenceNumber;
+    if (latestPatient) {
+      // Extract the sequence number and increment
+      const currentSequence = parseInt(latestPatient.patientId.slice(-4));
+      sequenceNumber = (currentSequence + 1).toString().padStart(4, '0');
+    } else {
+      // Start with 0001 if no existing patients
+      sequenceNumber = '0001';
+    }
+    
+    return `${prefix}${currentYear}${sequenceNumber}`;
+  } catch (error) {
+    console.error('Error generating patient ID:', error);
+    throw error;
+  }
+}
+
+module.exports = {
+  User,
+  generatePatientId
+};

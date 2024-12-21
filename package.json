@@ -40,6 +40,7 @@
     "lucide-react": "^0.344.0",
     "mongoose": "^8.9.0",
     "mongoose-paginate-v2": "^1.8.5",
+    "node-cache": "^5.1.2",
     "nodemailer": "^6.9.16",
     "papaparse": "^5.4.1",
     "react": "^18.2.0",

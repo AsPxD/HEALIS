@@ -212,7 +212,8 @@ const handleBookAppointment = async () => {
       userId,
       doctorId: doctor._id,
       doctorName: doctor.name,
-      doctorSpecialty: doctor.specialty,
+      // Use the first specialty from the specialities array as the primary specialty
+      doctorSpecialty: doctor.specialities[0], // Fixed: Changed from doctor.specialty to doctor.specialities[0]
       appointmentDate: selectedDate.toISOString(),
       appointmentTime: selectedTime,
       email
@@ -227,11 +228,9 @@ const handleBookAppointment = async () => {
     setEmail('');
     setOtp('');
 
-    // Optional: You might want to trigger a refresh of appointments or navigate to a confirmation page
   } catch (error) {
     console.error('Booking error', error);
     
-    // More specific error handling
     if (error.response) {
       toast.error(error.response.data.message || 'Failed to book appointment');
     } else {

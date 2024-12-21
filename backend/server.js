@@ -8,7 +8,7 @@ const nodemailer = require('nodemailer')
 const handlebars = require('handlebars')
 const crypto = require('crypto')
 const otpStorage = new Map()
-const User = require('./models/SchemaRegister')
+
 // Add these to your existing server.js file
 const DoctorAppointment = require('./models/DoctorAppointmentSchema'); // Adjust path as needed
   // Add this at the top of your server.js with other requires
@@ -33,6 +33,7 @@ const Medication = require('./models/MedicationSchema');
 // Add at the top with other requires
 const NutritionistBooking = require('./models/NutritionistBookingSchema');
 const Contact = require('./models/ContactSchema')
+const { User, generatePatientId } = require('./models/SchemaRegister');
 // Book Nutritionist Appointment Route
 const PORT = process.env.PORT || 3000
 const app = express()
@@ -56,54 +57,60 @@ mongoose.connect(`mongodb+srv://dhruvmehta2004:0Tb9LfHuX0jTPQsW@cluster0.bmpyuvt
         process.exit(1)
     })
 
-app.post('/auth', async (req, res) => {
-    try {
-        const {
-            fullName,
-            phoneNumber,
-            dateOfBirth,
-            gender,
-            email,
-            password
-        } = req.body;
-
-        // Check if user already exists
-        const existingUser = await User.findOne({
-            $or: [{ email }, { phoneNumber }]
-        });
-
-        if (existingUser) {
-            return res.status(400).json({
-                message: 'User with this email or phone number already exists'
-            });
-        }
-
-        // Create new user
-        const newUser = new User({
-            fullName,
-            phoneNumber,
-            dateOfBirth,
-            gender,
-            email,
-            password
-        });
-
-        // Save user to database
-        await newUser.save();
-        sendWelcomeEmail(email,fullName)
-        res.status(201).json({
-            message: 'User registered successfully',
-            userId: newUser._id
-        });
-
-    } catch (error) {
-        console.error('Registration Error:', error);
-        res.status(500).json({
-            message: 'Server error during registration',
-            error: error.message
-        });
-    }
-});
+    app.post('/auth', async (req, res) => {
+      try {
+          const {
+              fullName,
+              phoneNumber,
+              dateOfBirth,
+              gender,
+              email,
+              password
+          } = req.body;
+  
+          // Check if user already exists
+          const existingUser = await User.findOne({
+              $or: [{ email }, { phoneNumber }]
+          });
+  
+          if (existingUser) {
+              return res.status(400).json({
+                  message: 'User with this email or phone number already exists'
+              });
+          }
+  
+          // Generate unique patient ID
+          const patientId = await generatePatientId();
+  
+          // Create new user with patient ID
+          const newUser = new User({
+              patientId,
+              fullName,
+              phoneNumber,
+              dateOfBirth,
+              gender,
+              email,
+              password
+          });
+  
+          // Save user to database
+          await newUser.save();
+          sendWelcomeEmail(email, fullName);
+          
+          res.status(201).json({
+              message: 'User registered successfully',
+              userId: newUser._id,
+              patientId: newUser.patientId
+          });
+  
+      } catch (error) {
+          console.error('Registration Error:', error);
+          res.status(500).json({
+              message: 'Server error during registration',
+              error: error.message
+          });
+      }
+  });
 app.post('/auth/login', async (req, res) => {
     try {
         const { email, password } = req.body;
@@ -143,16 +150,17 @@ app.post('/auth/login', async (req, res) => {
     }
 });
 // Add this route to server.js
-app.get('/auth/:userId', async (req, res) => {
-  try {
-    const userId = req.params.userId;
 
-    // Find user by ID
-    const user = await User.findById(userId).select('fullName email');
+app.get('/auth/:patientId', async (req, res) => {
+  try {
+    const patientId = req.params.patientId;
+
+    // Find user by patientId instead of _id
+    const user = await User.findOne({ patientId }).select('fullName email');
 
     if (!user) {
       return res.status(404).json({
-        message: 'User not found'
+        message: 'Patient not found'
       });
     }
 
@@ -163,14 +171,13 @@ app.get('/auth/:userId', async (req, res) => {
     });
 
   } catch (error) {
-    console.error('Fetch User Profile Error:', error);
+    console.error('Fetch Patient Profile Error:', error);
     res.status(500).json({
-      message: 'Server error fetching user profile',
+      message: 'Server error fetching patient profile',
       error: error.message
     });
   }
 });
-
 
 // Appointment Booking Route
 app.post('/appointments/book', async (req, res) => {
@@ -3278,6 +3285,67 @@ app.patch('/api/contact/submissions/:id', authenticateAdmin, async (req, res) =>
     });
   }
 });*/
+const otpStore = new Map()
+app.post('/api/send-otp', async (req, res) => {
+  try {
+    const { email } = req.body;
+    
+    // Generate 6-digit OTP
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    
+    // Store OTP with 5-minute expiry
+    otpStore.set(email, {
+      otp,
+      expiry: Date.now() + 5 * 60 * 1000 // 5 minutes
+    });
+    
+    // Send OTP email
+    await transporter.sendMail({
+      from: '"HEALIS Healthcare" <care.healis@gmail.com>',
+      to: email,
+      subject: 'Verify Patient Access',
+      html: `
+        <div style="font-family: Arial, sans-serif; padding: 20px;">
+          <h2>Patient Record Access Verification</h2>
+          <p>A doctor has requested to view your medical records. Use the following code to verify access:</p>
+          <h1 style="color: #2563eb; font-size: 32px;">${otp}</h1>
+          <p>This code will expire in 5 minutes.</p>
+          <p>If you did not request this, please ignore this email.</p>
+        </div>
+      `
+    });
+    
+    res.json({ message: 'OTP sent successfully' });
+  } catch (error) {
+    console.error('Error sending OTP:', error);
+    res.status(500).json({ message: 'Failed to send OTP' });
+  }
+});
+
+// Verify OTP endpoint
+app.post('/api/verify-otp', (req, res) => {
+  const { email, otp } = req.body;
+  
+  const storedData = otpStore.get(email);
+  
+  if (!storedData) {
+    return res.status(400).json({ message: 'No OTP found for this email' });
+  }
+  
+  if (Date.now() > storedData.expiry) {
+    otpStore.delete(email);
+    return res.status(400).json({ message: 'OTP has expired' });
+  }
+  
+  if (storedData.otp !== otp) {
+    return res.status(400).json({ message: 'Invalid OTP' });
+  }
+  
+  // Clear OTP after successful verification
+  otpStore.delete(email);
+  
+  res.json({ message: 'OTP verified successfully' });
+});
 app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname,'..' , 'index.html'))
 })
