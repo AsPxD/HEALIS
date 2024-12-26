@@ -1,10 +1,10 @@
-const mongoose = require('mongoose');
-
+const mongoose = require('mongoose')
+// Updated LabTest Schema
 const LabTestSchema = new mongoose.Schema({
   patient: {
     userId: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: 'User', // Reference to the User model
+      ref: 'User',
       required: true
     },
     fullName: {
@@ -20,7 +20,7 @@ const LabTestSchema = new mongoose.Schema({
   },
   tests: [{
     id: {
-      type: Number,
+      type: mongoose.Schema.Types.ObjectId, // Change from Number to ObjectId
       required: true
     },
     name: {
@@ -51,7 +51,7 @@ const LabTestSchema = new mongoose.Schema({
     default: 'Scheduled'
   }
 }, {
-  timestamps: true // This adds createdAt and updatedAt fields
+  timestamps: true
 });
 
 module.exports = mongoose.model('LabTest', LabTestSchema);

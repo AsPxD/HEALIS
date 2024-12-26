@@ -1,10 +1,27 @@
 import React from 'react';
 import { motion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
-import { ChevronLeft, ChevronRight, ArrowRight, Activity, Heart, Brain, Shield } from 'lucide-react';
+import { ChevronLeft, ChevronRight, ArrowRight, Activity, Heart, Brain, Shield, 
+  Database, 
+  FileText,FolderLock  } from 'lucide-react';
 import Button from '../shared/Button';
 
 const slides = [
+  {
+    title: "Health DigiLocker",
+    subtitle: "Your Complete Medical History in One Secure Place",
+    description: "Store, access, and analyze your entire medical journey with our advanced DigiLocker. From prescriptions to lab reports, everything is encrypted and available at your fingertips with real-time health analytics.",
+    image: "diglocker.webp",
+    buttonText: "Access DigiLocker",
+    buttonLink: "/digilocker",
+    accent: "from-indigo-600/80 to-blue-500/80",
+    icon: FolderLock,
+    features: [
+      { icon: Database, text: "Secure Cloud Storage" },
+      { icon: FileText, text: "Real-time Analytics" },
+      { icon: Shield, text: "End-to-End Encryption" }
+    ]
+  },
   {
     title: "Your Health, Our Priority",
     subtitle: "Experience the future of healthcare with AI-powered solutions",
@@ -51,6 +68,10 @@ const HeroSection = () => {
   const navigate = useNavigate();
   const [currentSlide, setCurrentSlide] = React.useState(0);
   const [isTransitioning, setIsTransitioning] = React.useState(false);
+
+  const handleNavigation = (path) => {
+    navigate(path);
+  };
 
   const nextSlide = () => {
     if (!isTransitioning) {
@@ -137,15 +158,15 @@ const HeroSection = () => {
                   className="flex items-center justify-center gap-4"
                 >
                   <Button
-                    onClick={() => navigate(slide.buttonLink)}
+                    onClick={() => handleNavigation(slides[currentSlide].buttonLink)}
                     className="bg-white text-gray-900 hover:bg-white/90"
                     icon={ArrowRight}
                   >
-                    {slide.buttonText}
+                    {slides[currentSlide].buttonText}
                   </Button>
                   <Button
                     variant="outline"
-                    onClick={() => navigate('/features')}
+                    onClick={() => handleNavigation('/features')}
                     className="border-white text-white hover:bg-white/20"
                   >
                     View Features

@@ -7,6 +7,8 @@ const bcrypt = require('bcryptjs')
 const nodemailer = require('nodemailer')
 const handlebars = require('handlebars')
 const crypto = require('crypto')
+const fs = require('fs')
+const multer = require('multer')
 const otpStorage = new Map()
 
 // Add these to your existing server.js file
@@ -296,7 +298,33 @@ app.patch('/appointments/:appointmentId/cancel', async (req, res) => {
 
 // Book Lab Tests Route
 // Email template function remains the same as before
+app.get('api/auth/:userId', async (req, res) => {
+  try {
+    const userId = req.params.userId;
 
+    // Find user by ID
+    const user = await User.findById(userId).select('fullName email');
+
+    if (!user) {
+      return res.status(404).json({
+        message: 'User not found'
+      });
+    }
+
+    // Return user profile information
+    res.status(200).json({
+      fullName: user.fullName,
+      email: user.email
+    });
+
+  } catch (error) {
+    console.error('Fetch User Profile Error:', error);
+    res.status(500).json({
+      message: 'Server error fetching user profile',
+      error: error.message
+    });
+  }
+});
 // Lab Tests Booking Route with Email Confirmation
 app.post('/lab-tests/book', async (req, res) => {
   try {
@@ -3345,6 +3373,231 @@ app.post('/api/verify-otp', (req, res) => {
   otpStore.delete(email);
   
   res.json({ message: 'OTP verified successfully' });
+});
+const medicalRecordSchema = new mongoose.Schema({
+  recordType: {
+    type: String,
+    required: true,
+    enum: ['prescription', 'lab-report', 'imaging', 'vaccination']
+  },
+  dateOfRecord: {
+    type: Date,
+    required: true
+  },
+  doctorName: {
+    type: String,
+    required: true
+  },
+  fileName: {
+    type: String,
+    required: true
+  },
+  fileUrl: {
+    type: String,
+    required: true
+  },
+  fileType: {
+    type: String,
+    required: true
+  },
+  fileSize: {
+    type: Number,
+    required: true
+  },
+  uploadDate: {
+    type: Date,
+    default: Date.now
+  },
+  userId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    required: false
+  }
+});
+
+const MedicalRecord = mongoose.model('MedicalRecord', medicalRecordSchema);
+const uploadDir = path.join(__dirname, 'uploads');
+if (!fs.existsSync(uploadDir)) {
+  fs.mkdirSync(uploadDir, { recursive: true });
+}
+
+app.use('/uploads', express.static(uploadDir));
+
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    cb(null, uploadDir);
+  },
+  filename: (req, file, cb) => {
+    const fileExt = path.extname(file.originalname);
+    const fileName = `${Date.now()}${fileExt}`;
+    cb(null, fileName);
+  }
+});
+
+const fileFilter = (req, file, cb) => {
+  const allowedTypes = /jpeg|jpg|png|pdf/;
+  const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
+  const mimetype = allowedTypes.test(file.mimetype);
+
+  if (extname && mimetype) {
+    cb(null, true);
+  } else {
+    cb(new Error('Invalid file type. Only JPEG, PNG and PDF files are allowed.'));
+  }
+};
+
+const upload = multer({
+  storage,
+  fileFilter,
+  limits: {
+    fileSize: 5 * 1024 * 1024 // 5MB limit
+  }
+});
+
+app.post('/digilocker/form', upload.single('file'), async (req, res) => {
+  try {
+    const { recordType, dateOfRecord, doctorName } = req.body;
+    
+    // Validate required fields
+    if (!recordType || !dateOfRecord || !doctorName) {
+      return res.status(400).json({
+        success: false,
+        message: 'All fields are required'
+      });
+    }
+
+    // Validate file upload
+    if (!req.file) {
+      return res.status(400).json({
+        success: false,
+        message: 'File is required'
+      });
+    }
+
+    // Create file URL using the static path
+    const fileUrl = `/uploads/${req.file.filename}`;
+
+    // Create new medical record without userId requirement
+    const medicalRecord = new MedicalRecord({
+      recordType,
+      dateOfRecord: new Date(dateOfRecord),
+      doctorName,
+      fileName: req.file.originalname,
+      fileUrl: fileUrl,
+      fileType: req.file.mimetype,
+      fileSize: req.file.size
+      // userId is now optional
+    });
+
+    await medicalRecord.save();
+
+    res.status(201).json({
+      success: true,
+      data: medicalRecord,
+      message: 'Medical record saved successfully'
+    });
+
+  } catch (error) {
+    console.error('Error saving medical record:', error);
+    
+    // Remove uploaded file if database save fails
+    if (req.file) {
+      const filePath = path.join(uploadDir, req.file.filename);
+      fs.unlink(filePath, (err) => {
+        if (err) console.error('Error deleting file:', err);
+      });
+    }
+
+    res.status(500).json({
+      success: false,
+      message: 'Error saving medical record',
+      error: error.message,
+      details: error.errors ? Object.keys(error.errors).map(key => ({
+        field: key,
+        message: error.errors[key].message
+      })) : null
+    });
+  }
+});
+
+// GET route to fetch medical records
+app.get('/digilocker/records', async (req, res) => {
+  try {
+    const { recordType, page = 1, limit = 10 } = req.query;
+    const skip = (page - 1) * parseInt(limit);
+
+    // Build query
+    const query = {};
+    if (recordType) {
+      query.recordType = recordType;
+    }
+
+    // Get total count for pagination
+    const total = await MedicalRecord.countDocuments(query);
+
+    // Get paginated records
+    const records = await MedicalRecord
+      .find(query)
+      .sort({ uploadDate: -1 })
+      .skip(skip)
+      .limit(parseInt(limit));
+
+    res.status(200).json({
+      success: true,
+      data: {
+        records,
+        pagination: {
+          total,
+          page: parseInt(page),
+          pages: Math.ceil(total / parseInt(limit))
+        }
+      }
+    });
+
+  } catch (error) {
+    console.error('Error fetching medical records:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error fetching medical records',
+      error: error.message
+    });
+  }
+});
+
+// DELETE route to remove a medical record
+app.delete('/digilocker/records/:id', async (req, res) => {
+  try {
+    const record = await MedicalRecord.findById(req.params.id);
+    
+    if (!record) {
+      return res.status(404).json({
+        success: false,
+        message: 'Record not found'
+      });
+    }
+
+    // Delete file from uploads directory
+    const filePath = path.join(uploadDir, path.basename(record.filePath));
+    fs.unlink(filePath, (err) => {
+      if (err) console.error('Error deleting file:', err);
+    });
+
+    // Delete record from database
+    await MedicalRecord.findByIdAndDelete(req.params.id);
+
+    res.status(200).json({
+      success: true,
+      message: 'Record deleted successfully'
+    });
+
+  } catch (error) {
+    console.error('Error deleting record:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error deleting record',
+      error: error.message
+    });
+  }
 });
 app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname,'..' , 'index.html'))

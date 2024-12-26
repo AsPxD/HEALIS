@@ -41,7 +41,7 @@ import SmartMedReminder from './pages/SmartMedReminder';
 import InsuranceGuide from './pages/InsuranceGuide';
 import NGOCampaigns from './pages/NGOCampaigns';
 import HealthEducation from './pages/HealthEducation';
-
+import DigiLocker from './pages/Digilocker';
 // Import styles
 import 'react-toastify/dist/ReactToastify.css';
 import './index.css';
@@ -87,7 +87,7 @@ function App() {
               <Route path="/insurance" element={<InsuranceGuide />} />
               <Route path="/ngo-campaigns" element={<NGOCampaigns />} />
               <Route path="/health-education" element={<HealthEducation />} />
-
+              <Route path="/digilocker" element={<DigiLocker />} />
               {/* Fallback Route */}
               <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>

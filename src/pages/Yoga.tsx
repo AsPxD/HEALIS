@@ -6,10 +6,10 @@ import { FloatingElements, GradientBlob } from '../components/shared/BackgroundE
 import YogaPoses from '../components/education/sections/YogaPoses';
 import SuryaNamaskarGuide from '../components/education/SuryaNamaskarGuide';
 import MeditationGuide from '../components/education/sections/MeditationGuide';
-import YogaSection from '../components/education/YogaSection';
 import PranayamaGuide from '../components/yoga/PranayamaGuide';
 import YogaScheduler from '../components/yoga/YogaScheduler';
 import YogaBenefits from '../components/yoga/YogaBenefits';
+import YogaRecommendation from '../components/yoga/YogaRecommendation';
 
 const Yoga = () => {
   return (
@@ -30,6 +30,7 @@ const Yoga = () => {
         />
 
         <div className="space-y-24">
+          <YogaRecommendation />
           <YogaBenefits />
           <section className="space-y-8">
             <div className="text-center">

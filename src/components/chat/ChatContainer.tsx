@@ -2,6 +2,7 @@ import React, { useRef, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import ChatBubble from './ChatBubble';
 import { useChat } from '../../context/ChatContext';
+import ReactMarkdown from 'react-markdown'; 
 
 const ChatContainer = () => {
   const { messages } = useChat();
@@ -23,7 +24,13 @@ const ChatContainer = () => {
       {messages.map((message) => (
         <ChatBubble
           key={message.id}
-          message={message.text}
+          message={
+            message.isBot ? (
+              <ReactMarkdown>{message.text}</ReactMarkdown> // Render Markdown for bot messages
+            ) : (
+              message.text
+            )
+          }
           isBot={message.isBot}
           timestamp={message.timestamp}
         />

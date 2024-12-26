@@ -4,18 +4,12 @@ import { motion } from 'framer-motion';
 import { Stethoscope, Microscope, Syringe, Pill, Brain, Activity } from 'lucide-react';
 import DoctorAppointment from './DoctorAppointment';
 import LabTests from './LabTests';
-import Vaccinations from './Vaccinations';
-import Pharmacy from './Pharmacy';
 import MentalHealth from './MentalHealth';
-import HealthCheckup from './HealthCheckup';
 
 const tabs = [
   { id: 'doctors', label: 'Doctors', icon: Stethoscope, component: DoctorAppointment },
   { id: 'labs', label: 'Lab Tests', icon: Microscope, component: LabTests },
-  { id: 'vaccinations', label: 'Vaccinations', icon: Syringe, component: Vaccinations },
-  { id: 'pharmacy', label: 'Pharmacy', icon: Pill, component: Pharmacy },
-  { id: 'mental-health', label: 'Mental Health', icon: Brain, component: MentalHealth },
-  { id: 'health-checkup', label: 'Health Checkup', icon: Activity, component: HealthCheckup },
+  { id: 'mental-health', label: 'Mental Health', icon: Brain, component: MentalHealth }
 ];
 
 const AppointmentTabs = () => {
