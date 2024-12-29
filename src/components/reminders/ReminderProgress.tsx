@@ -3,44 +3,51 @@ import axios from 'axios';
 import { motion } from 'framer-motion';
 import { Activity, CheckCircle } from 'lucide-react';
 import { toast } from 'react-toastify';
-import { formatDistanceToNow } from 'date-fns';
+import { formatDistanceToNow, isAfter, isFuture } from 'date-fns';
 
-// Interfaces for different item types
-interface Reminder {
+// Updated interfaces to match the form data structures
+interface Appointment {
   _id: string;
   title: string;
-  doctor?: string;
-  status?: string;
-  date: Date;
-  completedAt?: Date;
+  doctor: string;
+  date: string;
+  time: string;
+  location: string;
+  notes?: string;
+  color: string;
+  status?: 'Active' | 'Cancelled' | 'Completed';
+  completedAt?: string;
 }
 
 interface Medication {
   _id: string;
   name: string;
   dosage: string;
-  status?: string;
-  startDate: Date;
-  endDate?: Date;
-  completedAt?: Date;
+  frequency: string;
+  times: string[];
+  startDate: string;
+  endDate?: string;
+  instructions?: string;
+  color: string;
+  status?: 'Active' | 'Discontinued' | 'Completed';
+  completedAt?: string;
 }
 
-interface Appointment {
+interface CompletedItem {
   _id: string;
-  status?: string;
-  appointmentDate: Date;
-  completedAt?: Date;
+  type: 'appointment' | 'medication';
+  title: string;
+  completedAt: string;
+  color: string;
 }
 
 const ReminderProgress = () => {
-  const [reminders, setReminders] = useState<Reminder[]>([]);
-  const [medications, setMedications] = useState<Medication[]>([]);
   const [appointments, setAppointments] = useState<Appointment[]>([]);
-  const [completedItems, setCompletedItems] = useState<(Reminder | Medication | Appointment)[]>([]);
+  const [medications, setMedications] = useState<Medication[]>([]);
+  const [completedItems, setCompletedItems] = useState<CompletedItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [showCompletedDetails, setShowCompletedDetails] = useState(false);
 
-  // Fetch all items
   const fetchItems = async () => {
     try {
       setIsLoading(true);
@@ -53,35 +60,52 @@ const ReminderProgress = () => {
         return;
       }
 
-      // Fetch reminders
-      const remindersResponse = await axios.get(`/reminders/${userId}`);
-      const fetchedReminders = remindersResponse.data.reminders;
+      // Fetch appointments and medications
+      const [appointmentsRes, medicationsRes] = await Promise.all([
+        axios.get(`/reminders/${userId}`),
+        axios.get(`/medications/${userId}`)
+      ]);
 
-      // Fetch medications
-      const medicationsResponse = await axios.get(`/medications/${userId}`);
-      const fetchedMedications = medicationsResponse.data.medications;
+      // Process appointments
+      const activeAppointments = appointmentsRes.data.reminders
+        .filter((app: Appointment) => 
+          app.status !== 'Cancelled' && 
+          isFuture(new Date(`${app.date}T${app.time}`))
+        );
 
-      // Fetch appointments
-      const appointmentsResponse = await axios.get(`/appointments/${userId}`);
-      const fetchedAppointments = appointmentsResponse.data.appointments;
-
-      // Separate active and completed items
-      const activeReminders = fetchedReminders.filter((r: Reminder) => r.status !== 'Cancelled' && r.status !== 'Completed');
-      const activeMedications = fetchedMedications.filter((m: Medication) => m.status === 'Active');
-      const activeAppointments = fetchedAppointments.filter((a: Appointment) => a.status !== 'Cancelled');
+      // Process medications
+      const activeMedications = medicationsRes.data.medications
+        .filter((med: Medication) => 
+          med.status === 'Active' && 
+          (!med.endDate || isFuture(new Date(med.endDate)))
+        );
 
       // Collect completed items
-      const completedItems = [
-        ...fetchedReminders.filter((r: Reminder) => r.status === 'Completed'),
-        ...fetchedMedications.filter((m: Medication) => m.status === 'Completed'),
-        ...fetchedAppointments.filter((a: Appointment) => a.status === 'Completed')
-      ];
+      const completedAppointments = appointmentsRes.data.reminders
+        .filter((app: Appointment) => app.status === 'Completed')
+        .map((app: Appointment) => ({
+          _id: app._id,
+          type: 'appointment' as const,
+          title: app.title,
+          completedAt: app.completedAt || app.date,
+          color: app.color
+        }));
 
-      // Update state
-      setReminders(activeReminders);
-      setMedications(activeMedications);
+      const completedMedications = medicationsRes.data.medications
+        .filter((med: Medication) => med.status === 'Completed')
+        .map((med: Medication) => ({
+          _id: med._id,
+          type: 'medication' as const,
+          title: med.name,
+          completedAt: med.completedAt || med.startDate,
+          color: med.color
+        }));
+
       setAppointments(activeAppointments);
-      setCompletedItems(completedItems);
+      setMedications(activeMedications);
+      setCompletedItems([...completedAppointments, ...completedMedications]
+        .sort((a, b) => new Date(b.completedAt).getTime() - new Date(a.completedAt).getTime()));
+
     } catch (error) {
       console.error('Error fetching progress items:', error);
       toast.error('Failed to load progress data');
@@ -90,24 +114,20 @@ const ReminderProgress = () => {
     }
   };
 
-  // Fetch items on component mount
   useEffect(() => {
     fetchItems();
   }, []);
 
-  // Calculate completion rates
-  const completedRemindersCount = reminders.filter(r => r.status === 'Completed').length;
-  const completedMedicationsCount = medications.filter(m => m.status === 'Completed').length;
-  const completedAppointmentsCount = appointments.filter(a => a.status === 'Completed').length;
+  // Calculate statistics
+  const totalAppointments = appointments.length;
+  const totalMedications = medications.length;
+  const totalCompleted = completedItems.length;
+  const totalItems = totalAppointments + totalMedications + totalCompleted;
   
-  const totalCount = reminders.length + medications.length + appointments.length;
-  const completedCount = completedRemindersCount + completedMedicationsCount + completedAppointmentsCount;
-  
-  const progressPercentage = totalCount > 0 
-    ? Math.round((completedCount / totalCount) * 100)
+  const progressPercentage = totalItems > 0 
+    ? Math.round((totalCompleted / totalItems) * 100)
     : 0;
 
-  // Render loading state
   if (isLoading) {
     return (
       <motion.div 
@@ -130,7 +150,7 @@ const ReminderProgress = () => {
         <div className="w-10 h-10 rounded-lg bg-white/20 flex items-center justify-center">
           <Activity className="w-5 h-5" />
         </div>
-        <h3 className="text-xl font-semibold">Daily Progress</h3>
+        <h3 className="text-xl font-semibold">Health Progress</h3>
       </div>
 
       <div className="mb-4">
@@ -150,20 +170,19 @@ const ReminderProgress = () => {
 
       <div className="grid grid-cols-3 gap-4">
         <div className="bg-white/10 rounded-xl p-4">
-          <p className="text-white/90 text-sm mb-1">Completed</p>
-          <p className="text-2xl font-bold">{completedCount}</p>
+          <p className="text-white/90 text-sm mb-1">Active</p>
+          <p className="text-2xl font-bold">{totalAppointments + totalMedications}</p>
         </div>
         <div className="bg-white/10 rounded-xl p-4">
-          <p className="text-white/90 text-sm mb-1">Pending</p>
-          <p className="text-2xl font-bold">{totalCount - completedCount}</p>
+          <p className="text-white/90 text-sm mb-1">Completed</p>
+          <p className="text-2xl font-bold">{totalCompleted}</p>
         </div>
         <div className="bg-white/10 rounded-xl p-4">
           <p className="text-white/90 text-sm mb-1">Total</p>
-          <p className="text-2xl font-bold">{totalCount}</p>
+          <p className="text-2xl font-bold">{totalItems}</p>
         </div>
       </div>
 
-      {/* Completed Items Details */}
       <div className="mt-6">
         <div 
           className="flex items-center justify-between cursor-pointer"
@@ -171,7 +190,7 @@ const ReminderProgress = () => {
         >
           <div className="flex items-center gap-2">
             <CheckCircle className="w-5 h-5" />
-            <h4 className="text-lg font-semibold">Completed Details</h4>
+            <h4 className="text-lg font-semibold">Completed Items</h4>
           </div>
           <span>{showCompletedDetails ? '▼' : '▶'}</span>
         </div>
@@ -179,25 +198,25 @@ const ReminderProgress = () => {
         {showCompletedDetails && (
           <div className="mt-4 space-y-2 max-h-64 overflow-y-auto">
             {completedItems.length === 0 ? (
-              <p className="text-white/70 text-center">No completed items</p>
+              <p className="text-white/70 text-center">No completed items yet</p>
             ) : (
               completedItems.map((item) => (
-                <div 
+                <motion.div 
                   key={item._id} 
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
                   className="bg-white/10 rounded-xl p-3 flex justify-between items-center"
                 >
                   <div>
-                    <p className="font-medium">
-                      {'title' in item ? item.title : 'name' in item ? item.name : 'Appointment'}
-                    </p>
+                    <p className="font-medium">{item.title}</p>
                     <p className="text-sm text-white/70">
-                      Completed {formatDistanceToNow(new Date(item.completedAt || new Date()), { addSuffix: true })}
+                      Completed {formatDistanceToNow(new Date(item.completedAt), { addSuffix: true })}
                     </p>
                   </div>
-                  <span className="text-green-400">
-                    {'doctor' in item ? 'Reminder' : 'name' in item ? 'Medication' : 'Appointment'}
-                  </span>
-                </div>
+                  <div className={`px-3 py-1 rounded-full ${item.color} bg-opacity-20`}>
+                    {item.type === 'appointment' ? 'Appointment' : 'Medication'}
+                  </div>
+                </motion.div>
               ))
             )}
           </div>

@@ -76,7 +76,7 @@ const MentalHealth: React.FC = () => {
                    addHours(doctor.availability.startTime, 1),
                    addHours(doctor.availability.startTime, 2)];
           }).flat() || [],
-          image: doctor.photo || 'https://via.placeholder.com/300'
+          image: `http://localhost:8000/uploads/${doctor.photo}` || 'https://via.placeholder.com/300'
         }));
         setDoctors(enhancedDoctors);
       } catch (error) {

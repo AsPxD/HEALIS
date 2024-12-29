@@ -3,9 +3,8 @@ import { motion } from 'framer-motion';
 import HeroSection from '../components/home/HeroSection';
 import FeaturesSection from '../components/home/FeaturesSection';
 import AIFeatureCards from '../components/home/AIFeatureCards';
-import ImmersiveCards from '../components/home/ImmersiveCards';
 import ReelsSection from '../components/home/ReelsSection';
-import DonationSection from '../components/home/DonationSection';
+import LoyaltySection from '../components/home/DonationSection';
 import { FloatingElements, GradientBlob } from '../components/shared/BackgroundElements';
 
 const Home = () => {
@@ -30,14 +29,12 @@ const Home = () => {
         {/* AI Features */}
         <AIFeatureCards />
 
-        {/* Immersive Experience */}
-        <ImmersiveCards />
 
         {/* Health Reels */}
         <ReelsSection />
 
         {/* Donation Section */}
-        <DonationSection />
+        <LoyaltySection />
       </div>
     </motion.div>
   );

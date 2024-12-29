@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { motion } from 'framer-motion';
-import { Bell, Clock, Calendar, Trash2, XCircle, Pill } from 'lucide-react';
+import { Bell, Clock, Calendar, Trash2, XCircle, Pill, CheckCircle } from 'lucide-react';
 import { format, isToday, isTomorrow, isThisWeek, formatDistanceToNow, isAfter } from 'date-fns';
 import { toast } from 'react-toastify';
 import Button from '../shared/Button';
@@ -64,7 +64,8 @@ const ReminderList: React.FC = () => {
       const remindersResponse = await axios.get(`/reminders/${userId}`);
       const reminders = remindersResponse.data.reminders
         .filter((reminder: Reminder) => 
-          reminder.status !== 'Cancelled' && isAfter(new Date(reminder.date), new Date())
+          reminder.status !== 'Cancelled' && reminder.status !== 'Completed' && 
+          isAfter(new Date(reminder.date), new Date())
         )
         .map((reminder: Reminder) => ({ ...reminder, type: 'reminder' }));
 
@@ -93,10 +94,47 @@ const ReminderList: React.FC = () => {
     }
   };
 
-  // Fetch items on component mount
   useEffect(() => {
     fetchItems();
   }, []);
+
+  // Handle reminder completion
+  const handleCompleteReminder = async (reminderId: string) => {
+    try {
+      const response = await axios.patch(`/reminders/${reminderId}/complete`, {
+        completedAt: new Date().toISOString()
+      });
+      
+      if (response.data.success) {
+        setItems(items.filter(item => item._id !== reminderId));
+        toast.success('Reminder marked as completed');
+      } else {
+        toast.error('Failed to complete reminder');
+      }
+    } catch (error) {
+      console.error('Error completing reminder:', error);
+      toast.error('Failed to complete reminder');
+    }
+  };
+
+  // Handle medication completion
+  const handleCompleteMedication = async (medicationId: string) => {
+    try {
+      const response = await axios.patch(`/medications/${medicationId}/complete`, {
+        completedAt: new Date().toISOString()
+      });
+      
+      if (response.data.success) {
+        setItems(items.filter(item => item._id !== medicationId));
+        toast.success('Medication marked as completed');
+      } else {
+        toast.error('Failed to complete medication');
+      }
+    } catch (error) {
+      console.error('Error completing medication:', error);
+      toast.error('Failed to complete medication');
+    }
+  };
 
   // Handle reminder cancellation
   const handleCancelReminder = async (reminderId: string) => {
@@ -139,7 +177,6 @@ const ReminderList: React.FC = () => {
       : new Date((item as Medication).startDate);
     
     let group = 'later';
-
     if (isToday(date)) group = 'today';
     else if (isTomorrow(date)) group = 'tomorrow';
     else if (isThisWeek(date)) group = 'thisWeek';
@@ -149,15 +186,6 @@ const ReminderList: React.FC = () => {
     return acc;
   }, {} as Record<string, ReminderOrMedication[]>);
 
-  // Sort items within each group
-  Object.keys(groupedItems).forEach(group => {
-    groupedItems[group].sort((a, b) => {
-      const dateA = a.type === 'reminder' ? new Date((a as Reminder).date) : new Date((a as Medication).startDate);
-      const dateB = b.type === 'reminder' ? new Date((b as Reminder).date) : new Date((b as Medication).startDate);
-      return dateA.getTime() - dateB.getTime();
-    });
-  });
-
   const groupTitles = {
     today: 'Today',
     tomorrow: 'Tomorrow',
@@ -165,7 +193,6 @@ const ReminderList: React.FC = () => {
     later: 'Later'
   };
 
-  // Loading state
   if (isLoading) {
     return (
       <div className="text-center py-6 text-gray-500">
@@ -257,6 +284,18 @@ const ReminderList: React.FC = () => {
                     </div>
 
                     <div className="flex gap-2">
+                      <motion.button
+                        whileHover={{ scale: 1.1 }}
+                        whileTap={{ scale: 0.9 }}
+                        onClick={() => item.type === 'reminder' 
+                          ? handleCompleteReminder(item._id)
+                          : handleCompleteMedication(item._id)
+                        }
+                        className="w-8 h-8 rounded-full bg-green-100 flex items-center justify-center text-green-600 hover:bg-green-200 transition-colors"
+                      >
+                        <CheckCircle className="w-5 h-5" />
+                      </motion.button>
+
                       {item.type === 'reminder' ? (
                         <motion.button
                           whileHover={{ scale: 1.1 }}

@@ -287,7 +287,7 @@ const LabTests: React.FC = () => {
               >
                 <div className="flex items-start gap-4">
                   <img
-                    src={lab.photo}
+                    src={`http://localhost:8000/uploads/${lab.photo}`}
                     alt={lab.labName}
                     className="w-24 h-24 rounded-lg object-cover"
                   />

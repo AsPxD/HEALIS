@@ -91,11 +91,6 @@ const Dashboard = () => {
               <AppointmentsList />
               <LabTestsList />
             </div>
-
-            <div className="grid lg:grid-cols-2 gap-8">
-              <VaccinationsList />
-              <PharmacyList />
-            </div>
             <div className="grid lg:grid-cols-2 gap-8">
             <MentalHealthList />
             <HealthCheckupList />

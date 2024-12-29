@@ -329,14 +329,14 @@ app.get('api/auth/:userId', async (req, res) => {
 app.post('/lab-tests/book', async (req, res) => {
   try {
     const { 
-      userId, 
+      userId,
       tests, 
       date, 
       time,
       totalAmount
     } = req.body;
 
-    // Fetch user details to automatically include in the lab test booking
+    // Fetch user details including patientId
     const user = await User.findById(userId);
     
     if (!user) {
@@ -345,10 +345,11 @@ app.post('/lab-tests/book', async (req, res) => {
       });
     }
 
-    // Create new lab test booking
+    // Create new lab test booking with both userId and patientId
     const newLabTest = new LabTest({
+      userId: userId,  // Add userId
       patient: {
-        userId: user._id,
+        patientId: user.patientId,
         fullName: user.fullName,
         email: user.email
       },
@@ -358,10 +359,9 @@ app.post('/lab-tests/book', async (req, res) => {
       totalAmount
     });
 
-    // Save lab test booking
     await newLabTest.save();
 
-    // Prepare booking data for email template
+    // Rest of the email sending code remains the same
     const bookingData = {
       _id: newLabTest._id,
       patientName: user.fullName,
@@ -371,7 +371,6 @@ app.post('/lab-tests/book', async (req, res) => {
       totalAmount: totalAmount
     };
 
-    // Send confirmation email
     try {
       await transporter.sendMail({
         from: '"HEALIS Healthcare" <care.healis@gmail.com>',
@@ -381,8 +380,6 @@ app.post('/lab-tests/book', async (req, res) => {
       });
     } catch (emailError) {
       console.error('Email sending failed:', emailError);
-      // Don't return error response here, as booking was successful
-      // Just log the error and continue
     }
 
     res.status(201).json({
@@ -399,16 +396,14 @@ app.post('/lab-tests/book', async (req, res) => {
   }
 });
 
-// Rest of the API routes (generate-otp and verify-otp) remain the same as before
-
-// Get User's Lab Tests Route
+// Updated Get User's Lab Tests Route - now using userId directly
 app.get('/lab-tests/:userId', async (req, res) => {
   try {
     const userId = req.params.userId;
 
-    // Find all lab tests for the user
-    const labTests = await LabTest.find({ 'patient.userId': userId })
-      .sort({ bookingDate: -1 }); // Sort by date descending
+    // Find all lab tests for the user using userId
+    const labTests = await LabTest.find({ userId })
+      .sort({ bookingDate: -1 });
 
     res.status(200).json({
       labTests
@@ -428,14 +423,12 @@ app.patch('/lab-tests/:labTestId/cancel', async (req, res) => {
   try {
     const labTestId = req.params.labTestId;
 
-    // Find and update the lab test booking
     const updatedLabTest = await LabTest.findByIdAndUpdate(
       labTestId, 
       { status: 'Cancelled' }, 
-      { new: true } // Return the updated document
+      { new: true }
     );
 
-    // Check if lab test booking exists
     if (!updatedLabTest) {
       return res.status(404).json({
         message: 'Lab test booking not found'
@@ -451,6 +444,28 @@ app.patch('/lab-tests/:labTestId/cancel', async (req, res) => {
     console.error('Lab Test Booking Cancellation Error:', error);
     res.status(500).json({
       message: 'Server error during lab test booking cancellation',
+      error: error.message
+    });
+  }
+});
+
+// Updated Get User's Lab Tests Route using patientId
+app.get('/lab-tests/patient/:patientId', async (req, res) => {
+  try {
+    const patientId = req.params.patientId;
+
+    // Find all lab tests for the patient using patientId directly
+    const labTests = await LabTest.find({ 'patient.patientId': patientId })
+      .sort({ bookingDate: -1 });
+
+    res.status(200).json({
+      labTests
+    });
+
+  } catch (error) {
+    console.error('Fetch Lab Tests Error:', error);
+    res.status(500).json({
+      message: 'Server error fetching lab tests',
       error: error.message
     });
   }
@@ -1312,6 +1327,103 @@ app.post('/medications/add', async (req, res) => {
     });
   }
 });
+
+app.patch('/reminders/:id/complete', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { completedAt } = req.body;
+
+    const updatedReminder = await Reminder.findByIdAndUpdate(
+      id, 
+      { 
+        status: 'Completed',
+        completedAt
+      }, 
+      { new: true, runValidators: true }
+    );
+
+    if (!updatedReminder) {
+      return res.status(404).json({
+        message: 'Reminder not found',
+        success: false
+      });
+    }
+
+    res.status(200).json({
+      message: 'Reminder marked as completed',
+      reminder: updatedReminder,
+      success: true
+    });
+
+  } catch (error) {
+    console.error('Complete Reminder Error:', error);
+    res.status(500).json({
+      message: 'Server error while completing reminder',
+      error: error.message,
+      success: false
+    });
+  }
+});
+
+app.patch('/medications/:id/complete',  async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { completedAt } = req.body;
+
+    // Validate medication ID
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid medication ID format'
+      });
+    }
+
+    // Find and update the medication
+    const medication = await Medication.findById(id);
+
+    if (!medication) {
+      return res.status(404).json({
+        success: false,
+        message: 'Medication not found'
+      });
+    }
+
+    // Verify user owns this medication
+    if (medication.userId.toString() !== req.user._id.toString()) {
+      return res.status(403).json({
+        success: false,
+        message: 'Not authorized to complete this medication'
+      });
+    }
+
+    // Update medication status and completion time
+    medication.status = 'Completed';
+    medication.completedAt = completedAt || new Date();
+    
+    // Save the updated medication
+    await medication.save();
+
+    // Return success response
+    res.json({
+      success: true,
+      message: 'Medication marked as completed',
+      data: {
+        medicationId: medication._id,
+        status: medication.status,
+        completedAt: medication.completedAt
+      }
+    });
+
+  } catch (error) {
+    console.error('Error completing medication:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to complete medication',
+      error: error.message
+    });
+  }
+});
+
 
 // Get User's Medications Route
 app.get('/medications/:userId', async (req, res) => {

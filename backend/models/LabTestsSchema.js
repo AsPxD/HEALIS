@@ -1,9 +1,14 @@
 const mongoose = require('mongoose')
-// Updated LabTest Schema
+
 const LabTestSchema = new mongoose.Schema({
+  userId: {  // Added userId field
+    type: String,
+    required: true,
+    ref: 'User'
+  },
   patient: {
-    userId: {
-      type: mongoose.Schema.Types.ObjectId,
+    patientId: {
+      type: String,
       ref: 'User',
       required: true
     },
@@ -20,7 +25,7 @@ const LabTestSchema = new mongoose.Schema({
   },
   tests: [{
     id: {
-      type: mongoose.Schema.Types.ObjectId, // Change from Number to ObjectId
+      type: mongoose.Schema.Types.ObjectId,
       required: true
     },
     name: {

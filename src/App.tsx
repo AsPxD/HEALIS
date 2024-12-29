@@ -26,7 +26,7 @@ import EmergencySupport from './pages/EmergencySupport';
 // AI & Technology
 import AIChatSupport from './pages/AIChatSupport';
 import AIHealthDiagnostics from './pages/AIHealthDiagnostics';
-import AIForecasting from './pages/AIForecasting';
+import Allergy from './pages/AIForecasting';
 import BlockchainHealth from './pages/BlockchainHealth';
 
 // Wellness & Lifestyle
@@ -72,7 +72,7 @@ function App() {
               {/* AI & Technology */}
               <Route path="/ai-chat" element={<AIChatSupport />} />
               <Route path="/ai-diagnostics" element={<AIHealthDiagnostics />} />
-              <Route path="/ai-forecasting" element={<AIForecasting />} />
+              <Route path="/ai-forecasting" element={<Allergy />} />
               <Route path="/blockchain-health" element={<BlockchainHealth />} />
 
               {/* Wellness & Lifestyle */}

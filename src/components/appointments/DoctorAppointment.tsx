@@ -8,7 +8,7 @@ import DatePicker from '../shared/DatePicker';
 import { toast } from 'react-toastify';
 import axios from 'axios';
 
-// Updated Doctor interface to include all relevant fields
+// Interfaces
 interface Doctor {
   _id: string;
   name: string;
@@ -25,13 +25,21 @@ interface Doctor {
     startTime: string;
     endTime: string;
   };
+  timeSlots?: TimeSlot[];
+  image?: string;
+}
+
+interface TimeSlot {
+  id: string;
+  time: string;
 }
 
 const DoctorAppointment = () => {
+  // State management
   const [doctors, setDoctors] = useState<Doctor[]>([]);
   const [selectedDate, setSelectedDate] = useState<Date>();
   const [selectedDoctor, setSelectedDoctor] = useState<string>();
-  const [selectedTime, setSelectedTime] = useState<string>();
+  const [selectedTimeSlot, setSelectedTimeSlot] = useState<string>();
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedSpecialty, setSelectedSpecialty] = useState("");
   const [isBooking, setIsBooking] = useState(false);
@@ -57,13 +65,30 @@ const DoctorAppointment = () => {
     'diet'
   ];
 
-  // Updated fetchDoctors to handle actual doctor data and filter excluded specialties
+  // Helper function to generate time slots
+  const generateTimeSlots = (startTime: string, endTime: string): TimeSlot[] => {
+    const slots: TimeSlot[] = [];
+    let currentTime = startTime;
+    
+    while (currentTime < endTime) {
+      const [hours, minutes] = currentTime.split(':');
+      const slotId = `${currentTime}-${Math.random().toString(36).substr(2, 9)}`;
+      slots.push({ id: slotId, time: currentTime });
+      
+      // Add 1 hour to current time
+      const newHour = (parseInt(hours) + 1) % 24;
+      currentTime = `${newHour.toString().padStart(2, '0')}:${minutes}`;
+    }
+    
+    return slots;
+  };
+
+  // Fetch doctors data
   useEffect(() => {
     const fetchDoctors = async () => {
       try {
         const response = await axios.get('http://localhost:8000/api/verified-doctors');
         const filteredDoctors = response.data.filter((doctor: Doctor) => {
-          // Check if none of the doctor's specialities match the excluded ones
           return !doctor.specialities.some(specialty => 
             excludedSpecialties.some(excluded => 
               specialty.toLowerCase().includes(excluded.toLowerCase())
@@ -73,14 +98,11 @@ const DoctorAppointment = () => {
         
         const enhancedDoctors = filteredDoctors.map((doctor: Doctor) => ({
           ...doctor,
-          rating: 4.5, // Default rating for now
-          reviews: Math.floor(Math.random() * 300), // Random reviews for demo
-          availability: doctor.availability?.days.map(day => {
-            return [doctor.availability.startTime, 
-                   addHours(doctor.availability.startTime, 1),
-                   addHours(doctor.availability.startTime, 2)];
-          }).flat() || [],
-          image: doctor.photo || 'https://via.placeholder.com/300'
+          rating: 4.5,
+          reviews: Math.floor(Math.random() * 300),
+          timeSlots: doctor.availability ? 
+            generateTimeSlots(doctor.availability.startTime, doctor.availability.endTime) : [],
+          image: `http://localhost:8000/uploads/${doctor.photo}` || 'https://via.placeholder.com/300'
         }));
         setDoctors(enhancedDoctors);
       } catch (error) {
@@ -92,7 +114,7 @@ const DoctorAppointment = () => {
     fetchDoctors();
   }, []);
 
-  // Updated filter to use specialities array
+  // Filter doctors based on search and specialty
   const filteredDoctors = doctors.filter(doctor => {
     const matchesSearch = 
       doctor.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -105,23 +127,14 @@ const DoctorAppointment = () => {
     return matchesSearch && matchesSpecialty;
   });
 
-  // Helper function to add hours to time string
-  const addHours = (time: string, hours: number): string => {
-    const [h, m] = time.split(':');
-    const newHour = (parseInt(h) + hours) % 24;
-    return `${newHour.toString().padStart(2, '0')}:${m}`;
-  };
-
-  // Get unique specialties from filtered doctors
+  // Get unique specialties
   const allSpecialties = Array.from(
     new Set(doctors.flatMap(doctor => doctor.specialities))
   ).sort();
 
-
   // Generate OTP Handler
   const handleGenerateOTP = async () => {
-    // Validation checks
-    if (!selectedDate || !selectedDoctor || !selectedTime) {
+    if (!selectedDate || !selectedDoctor || !selectedTimeSlot) {
       toast.error('Please complete all appointment details');
       return;
     }
@@ -149,97 +162,92 @@ const DoctorAppointment = () => {
     }
   };
 
-  // OTP Verification Handle
+  // OTP Verification Handler
+  const handleVerifyOTP = async () => {
+    if (!otp) {
+      toast.error('Please enter OTP');
+      return;
+    }
 
-// OTP Verification Handler
-const handleVerifyOTP = async () => {
-  if (!otp) {
-    toast.error('Please enter OTP');
-    return;
-  }
+    try {
+      const response = await axios.post('/appointments/verify-otp', { email, otp });
+      
+      if (response.data.success) {
+        await handleBookAppointment();
+        setShowOTPModal(false);
+        setOtp('');
+      }
+    } catch (error) {
+      console.error('OTP Verification Error', error);
+      
+      if (error.response) {
+        toast.error(error.response.data.message || 'Invalid or expired OTP');
+      } else {
+        toast.error('Error verifying OTP. Please try again.');
+      }
+    }
+  };
 
-  try {
-    const response = await axios.post('/appointments/verify-otp', { email, otp });
-    
-    if (response.data.success) {
-      // If OTP is verified successfully, proceed with booking
-      await handleBookAppointment();
-      
-      // Close the OTP modal
-      setShowOTPModal(false);
-      
-      // Reset OTP state
+  // Book Appointment Handler
+  const handleBookAppointment = async () => {
+    if (!selectedDate || !selectedDoctor || !selectedTimeSlot) {
+      toast.error('Please complete all appointment details');
+      return;
+    }
+
+    const userId = localStorage.getItem('userId');
+    if (!userId) {
+      toast.error('Please log in to book an appointment');
+      return;
+    }
+
+    const doctor = doctors.find(d => d._id === selectedDoctor);
+    if (!doctor) {
+      toast.error('Invalid doctor selection');
+      return;
+    }
+
+    const selectedTime = doctor.timeSlots?.find(slot => slot.id === selectedTimeSlot)?.time;
+    if (!selectedTime) {
+      toast.error('Invalid time slot selection');
+      return;
+    }
+
+    setIsBooking(true);
+
+    try {
+      const response = await axios.post('/appointments/book', {
+        userId,
+        doctorId: doctor._id,
+        doctorName: doctor.name,
+        doctorSpecialty: doctor.specialities[0],
+        appointmentDate: selectedDate.toISOString(),
+        appointmentTime: selectedTime,
+        email
+      });
+
+      toast.success('Appointment booked successfully!');
+
+      // Reset form
+      setSelectedDate(undefined);
+      setSelectedDoctor(undefined);
+      setSelectedTimeSlot(undefined);
+      setEmail('');
       setOtp('');
+
+    } catch (error) {
+      console.error('Booking error', error);
+      
+      if (error.response) {
+        toast.error(error.response.data.message || 'Failed to book appointment');
+      } else {
+        toast.error('Failed to book appointment. Please try again.');
+      }
+    } finally {
+      setIsBooking(false);
     }
-  } catch (error) {
-    console.error('OTP Verification Error', error);
-    
-    // More specific error handling
-    if (error.response) {
-      toast.error(error.response.data.message || 'Invalid or expired OTP');
-    } else {
-      toast.error('Error verifying OTP. Please try again.');
-    }
-  }
-};
+  };
 
-// Book Appointment Handler
-const handleBookAppointment = async () => {
-  // Validation checks
-  if (!selectedDate || !selectedDoctor || !selectedTime) {
-    toast.error('Please complete all appointment details');
-    return;
-  }
-
-  // Get user ID from local storage
-  const userId = localStorage.getItem('userId');
-  if (!userId) {
-    toast.error('Please log in to book an appointment');
-    return;
-  }
-
-  // Find selected doctor details
-  const doctor = doctors.find(d => d._id === selectedDoctor);
-  if (!doctor) {
-    toast.error('Invalid doctor selection');
-    return;
-  }
-
-  setIsBooking(true);
-
-  try {
-    const response = await axios.post('/appointments/book', {
-      userId,
-      doctorId: doctor._id,
-      doctorName: doctor.name,
-      // Use the first specialty from the specialities array as the primary specialty
-      doctorSpecialty: doctor.specialities[0], // Fixed: Changed from doctor.specialty to doctor.specialities[0]
-      appointmentDate: selectedDate.toISOString(),
-      appointmentTime: selectedTime,
-      email
-    });
-
-    toast.success('Appointment booked successfully!');
-
-    // Reset form
-    setSelectedDate(undefined);
-    setSelectedDoctor(undefined);
-    setSelectedTime(undefined);
-    setEmail('');
-    setOtp('');
-
-  } catch (error) {
-    console.error('Booking error', error);
-    
-    if (error.response) {
-      toast.error(error.response.data.message || 'Failed to book appointment');
-    } else {
-      toast.error('Failed to book appointment. Please try again.');
-    }
-  } finally {
-    setIsBooking(false);
-  }
-};
   return (
     <div className="grid lg:grid-cols-3 gap-8 relative">
       <div className="lg:col-span-2 space-y-6">
@@ -320,20 +328,20 @@ const handleBookAppointment = async () => {
                     >
                       <p className="font-medium text-gray-900 mb-2">Available Slots</p>
                       <div className="flex flex-wrap gap-2">
-                        {doctor.availability?.map((time) => (
+                        {doctor.timeSlots?.map((slot) => (
                           <button
-                            key={time}
+                            key={slot.id}
                             onClick={(e) => {
                               e.stopPropagation();
-                              setSelectedTime(time);
+                              setSelectedTimeSlot(slot.id);
                             }}
                             className={`px-4 py-2 rounded-lg transition-all duration-300
-                              ${selectedTime === time
+                              ${selectedTimeSlot === slot.id
                                 ? 'bg-violet-500 text-white'
                                 : 'bg-violet-50 text-violet-700 hover:bg-violet-100'
                               }`}
                           >
-                            {time}
+                            {slot.time}
                           </button>
                         ))}
                       </div>
@@ -355,7 +363,7 @@ const handleBookAppointment = async () => {
           />
         </div>
 
-        {selectedDoctor && selectedDate && selectedTime && (
+        {selectedDoctor && selectedDate && selectedTimeSlot && (
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
@@ -369,7 +377,12 @@ const handleBookAppointment = async () => {
               </div>
               <div className="flex items-center gap-2">
                 <Clock className="w-5 h-5" />
-                <span>{selectedTime}</span>
+                <span>
+                  {doctors
+                    .find(d => d._id === selectedDoctor)
+                    ?.timeSlots?.find(slot => slot.id === selectedTimeSlot)
+                    ?.time}
+                </span>
               </div>
             </div>
             
